@@ -14,8 +14,7 @@ namespace ConfigFile
         [STAThread]
         static void Main()
         {
-            using (var game = new Game1())
-                game.Run();
+            ConfigFile c = new ConfigFile("configFile.txt");
         }
     }
 #endif
