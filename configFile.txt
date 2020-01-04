@@ -1,14 +1,19 @@
 ﻿
-[TestCategory1: TestSection1]
-bool: someBool = true;
-int: someInt = 30;
-float: someFloat = 3.14;
-double: someDouble = 3.14;
-string: someString = "Hello";
+[TestSection1ForAllTypes]
+bool: b = true;
+int: i = 30;
+float: f = 3.14;
+double: d = 5.32;
+string: s = "Hallo Welt";
 
-[TestCategory1: TestSection2]
-float: pi = 3.14;
-string: myName = "Moritz";
+List<bool>: bs = {true, false, true, true};
+List<int>: is = {100, 200, 500, 300, 1000};
+List<float>: fs = {3.14, 5.123, 2.3213, 5.32, 6.3};
+List<double>: ds = {1.2323232, 23.232323};
+List<string>: ss = {"Das", "sind", "mehrere", "strings"};
 
-[TestSection3]
-bool: truth = false;
+List<List<bool>>: llb = {{true, false}, {true, true, false}};
+List<List<int>>: lli = {{1, 2, 3, 4}, {1, 2, 3, 4}};
+List<List<float>>: llf = {{3.14, 3.4}, {3.56}};
+List<List<double>>: lld = {{3.232323, 32.32323, 23.232323}, {3.333}};
+List<List<string>>: lls = {{"Hallo", "Welt"}, {"Zweite", "Sublist"}};

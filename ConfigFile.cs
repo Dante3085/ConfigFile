@@ -17,6 +17,18 @@ namespace ConfigFile
         FLOAT,
         DOUBLE,
         STRING,
+
+        LIST_BOOL,
+        LIST_INT,
+        LIST_FLOAT,
+        LIST_DOUBLE,
+        LIST_STRING,
+
+        LIST_LIST_BOOL,
+        LIST_LIST_INT,
+        LIST_LIST_FLOAT,
+        LIST_LIST_DOUBLE,
+        LIST_LIST_STRING,
     }
 
     public class SectionAttribute
@@ -95,6 +107,18 @@ namespace ConfigFile
             { "float", EType.FLOAT },
             { "double", EType.DOUBLE },
             { "string", EType.STRING },
+
+            { "List<bool>", EType.LIST_BOOL },
+            { "List<int>", EType.LIST_INT },
+            { "List<float>", EType.LIST_FLOAT },
+            { "List<double>", EType.LIST_DOUBLE },
+            { "List<string>", EType.LIST_STRING },
+
+            { "List<List<bool>>", EType.LIST_LIST_BOOL },
+            { "List<List<int>>", EType.LIST_LIST_INT },
+            { "List<List<float>>", EType.LIST_LIST_FLOAT },
+            { "List<List<double>>", EType.LIST_LIST_DOUBLE },
+            { "List<List<string>>", EType.LIST_LIST_STRING },
         };
 
         public ConfigFile(String path)
@@ -232,33 +256,235 @@ namespace ConfigFile
         {
             Object returnValue;
 
-            switch(type)
+            if (type == EType.LIST_BOOL   ||
+                type == EType.LIST_INT    ||
+                type == EType.LIST_FLOAT  ||
+                type == EType.LIST_DOUBLE ||
+                type == EType.LIST_STRING)
             {
-                case EType.BOOL:
-                    returnValue = bool.Parse(s);
-                    break;
+                returnValue = ListStringToType(s, type);
+            }
+            else if (type == EType.LIST_LIST_BOOL   ||
+                     type == EType.LIST_LIST_INT    ||
+                     type == EType.LIST_LIST_FLOAT  ||
+                     type == EType.LIST_LIST_DOUBLE ||
+                     type == EType.LIST_LIST_STRING)
+            {
+                returnValue = List2dStringToType(s, type);
+            }
+            else
+            {
+                switch (type)
+                {
+                    case EType.BOOL:
+                        returnValue = StringToBool(s);
+                        break;
 
-                case EType.INT:
-                    returnValue = int.Parse(s);
-                    break;
+                    case EType.INT:
+                        returnValue = StringToInt(s);
+                        break;
 
-                case EType.FLOAT:
-                    returnValue = float.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-                    break;
+                    case EType.FLOAT:
+                        returnValue = StringToFloat(s);
+                        break;
 
-                case EType.DOUBLE:
-                    returnValue = double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-                    break;
+                    case EType.DOUBLE:
+                        returnValue = StringToDouble(s);
+                        break;
 
-                case EType.STRING:
-                    returnValue = s.Replace("\"", "");
-                    break;
+                    case EType.STRING:
+                        returnValue = StringToString(s);
+                        break;
 
-                default:
-                    throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
+                    default:
+                        throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
+                }
             }
 
             return returnValue;
+        }
+
+        private Object ListStringToType(String s, EType type)
+        {
+            Object returnValue = null;
+
+            s = s.Remove(0, 1);
+            s = s.Remove(s.Length - 1, 1);
+
+            String[] elements = s.Split(',');
+
+            switch(type)
+            {
+                case EType.LIST_BOOL:
+                    {
+                        List<bool> list = new List<bool>();
+                        foreach (String boolString in elements)
+                        {
+                            list.Add(StringToBool(boolString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+
+                case EType.LIST_INT:
+                    {
+                        List<int> list = new List<int>();
+                        foreach (String intString in elements)
+                        {
+                            list.Add(StringToInt(intString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+
+                case EType.LIST_FLOAT:
+                    {
+                        List<float> list = new List<float>();
+                        foreach (String floatString in elements)
+                        {
+                            list.Add(StringToFloat(floatString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+
+                case EType.LIST_DOUBLE:
+                    {
+                        List<double> list = new List<double>();
+                        foreach (String doubleString in elements)
+                        {
+                            list.Add(StringToDouble(doubleString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+
+                case EType.LIST_STRING:
+                    {
+                        // TODO: Dämliche Bennenung StringToString und stringString.
+                        List<string> list = new List<string>();
+                        foreach (String stringString in elements)
+                        {
+                            list.Add(StringToString(stringString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+
+                default:
+                    throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a supported list type.");
+            }
+
+            return returnValue;
+        }
+
+        private Object List2dStringToType(String s, EType type)
+        {
+            Object returnValue = null;
+
+            s = s.Remove(0, 1);
+            s = s.Remove(s.Length - 1, 1);
+
+            String[] elements = s.Split(new String[] { "}," }, StringSplitOptions.None);
+            
+            for (int i = 0; i < elements.Length - 1; ++i)
+            {
+                elements[i] += "}";
+            }
+
+            switch(type)
+            {
+                case EType.LIST_LIST_BOOL:
+                    {
+                        List<List<bool>> listOfLists = new List<List<bool>>();
+                        foreach(String listString in elements)
+                        {
+                            listOfLists.Add((List<bool>)ListStringToType(listString, EType.LIST_BOOL));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+                case EType.LIST_LIST_INT:
+                    {
+                        List<List<int>> listOfLists = new List<List<int>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<int>)ListStringToType(listString, EType.LIST_INT));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+                case EType.LIST_LIST_FLOAT:
+                    {
+                        List<List<float>> listOfLists = new List<List<float>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<float>)ListStringToType(listString, EType.LIST_FLOAT));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+                case EType.LIST_LIST_DOUBLE:
+                    {
+                        List<List<double>> listOfLists = new List<List<double>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<double>)ListStringToType(listString, EType.LIST_DOUBLE));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+                case EType.LIST_LIST_STRING:
+                    {
+                        List<List<string>> listOfLists = new List<List<string>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<string>)ListStringToType(listString, EType.LIST_STRING));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+
+                default:
+                    throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a supported list list type.");
+            }
+
+            return returnValue;
+        }
+
+        private bool StringToBool(String s)
+        {
+            return bool.Parse(s);
+        }
+
+        private int StringToInt(String s)
+        {
+            return int.Parse(s);
+        }
+
+        private float StringToFloat(String s)
+        {
+            return float.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private double StringToDouble(String s)
+        {
+            return double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private String StringToString(String s)
+        {
+            return s.Replace("\"", "");
         }
     }
 }
