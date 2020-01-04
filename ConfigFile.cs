@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.IO;
 
+// TODO: Fehlendes Semikolon am Ende einer Sektion ist sehr schlecht. Komische Fehler, die nicht abgefangen werden.
+
 namespace ConfigFile
 {
     public enum EType
@@ -50,6 +52,18 @@ namespace ConfigFile
             Category = category;
             Attributes = new List<SectionAttribute>();
         }
+
+        public override string ToString()
+        {
+            if (Category != null)
+            {
+                return "[" + Category + ": " + Name + "]";
+            }
+            else
+            {
+                return "[" + Name + "]";
+            }
+        }
     }
 
     public class Category
@@ -61,6 +75,11 @@ namespace ConfigFile
         {
             Name = name;
             Sections = new List<Section>();
+        }
+
+        public override string ToString()
+        {
+            return Name;
         }
     }
 
@@ -89,19 +108,27 @@ namespace ConfigFile
 
             // TODO: Remove Comments
 
-            // TODO: Add initial Section outside Loop
             int indexFirstClosingSquareBracket = fileContents.IndexOf(']');
             Section currentSection = ParseSectionHeader(fileContents.Substring(0, indexFirstClosingSquareBracket + 1));
             fileContents = fileContents.Remove(0, indexFirstClosingSquareBracket + 1);
+
+            int previousFileContentsLength = fileContents.Length;
 
             while (fileContents.Length != 0)
             {
                 int indexNextClosingSquareBracket = fileContents.IndexOf(']');
                 int indexNextSemiColon = fileContents.IndexOf(';');
+                int indexNextEquals = fileContents.IndexOf('=');
 
                 // Found new Section.
                 if ((indexNextClosingSquareBracket != -1) && indexNextClosingSquareBracket < indexNextSemiColon)
                 {
+                    // Check if the last SectionAttribute of the currentSection has a missing semicolon. 
+                    if (indexNextEquals != -1 && indexNextEquals < indexNextClosingSquareBracket)
+                    {
+                        throw new ArgumentException("Last SectionAttribute of Section \"" + currentSection.Name + "\" has a missing semicolon(;).");
+                    }
+
                     // Handle finished Section.
                     AddSection(currentSection);
 
@@ -113,9 +140,15 @@ namespace ConfigFile
                 // Found new SectionAttribute
                 else if (indexNextSemiColon != -1)
                 {
-                    currentSection.Attributes.Add(ParseSectionAttribute(fileContents.Substring(0, indexNextSemiColon + 1)));
+                    currentSection.Attributes.Add(ParseSectionAttribute(fileContents.Substring(0, indexNextSemiColon + 1), currentSection.Name));
                     fileContents = fileContents.Remove(0, indexNextSemiColon + 1);
                 }
+
+                if (previousFileContentsLength == fileContents.Length)
+                {
+                    throw new ArgumentException("Last SectionAttribute in Section \"" + currentSection.Name + "\" is missing a semicolon(;).");
+                }
+                previousFileContentsLength = fileContents.Length;
             }
 
             AddSection(currentSection);
@@ -142,15 +175,37 @@ namespace ConfigFile
 
         private Section ParseSectionHeader(String headerString)
         {
+            // Remove '[' and ']' from headerString.
             headerString = headerString.Remove(0, 1);
             headerString = headerString.Remove(headerString.Length - 1, 1);
-            String[] categoryAndName = headerString.Split(':');
 
-            return new Section(categoryAndName[0], categoryAndName[1]);
+            int indexDoubleColon = headerString.IndexOf(':');
+
+            // SectionHeader has Category and Name.
+            if (indexDoubleColon != -1)
+            {
+                String[] categoryAndName = headerString.Split(':');
+                return new Section(categoryAndName[1], categoryAndName[0]);
+            }
+
+            // SectionHeader has only Name.
+            else
+            {
+                return new Section(headerString, null);
+            }
         }
 
-        private SectionAttribute ParseSectionAttribute(String attributeString)
+        private SectionAttribute ParseSectionAttribute(String attributeString, String sectionName)
         {
+            int numDoubleColons = attributeString.Count(c => c == ':'); ;
+            int numEquals = attributeString.Count(c => c == '=');
+            int numSemicolons = attributeString.Count(c => c == ';');
+
+            if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
+            {
+                throw new ArgumentException("Syntax error in one or more SectionAttributes in Section \"" + sectionName + "\".");
+            }
+
             EType type;
             String name;
             Object value;
