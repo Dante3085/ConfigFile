@@ -3,8 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.IO;
+
 
 // TODO: Fehlendes Semikolon am Ende einer Sektion ist sehr schlecht. Komische Fehler, die nicht abgefangen werden.
 
@@ -125,6 +125,47 @@ namespace ConfigFile
         {
             ParseFileContents(File.ReadAllText(path));
         }
+
+        public SectionAttribute GetSectionAttribute(String sectionName, String attributeName)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            SectionAttribute sectionAttribute = section.Attributes.Find(a => a.Name == attributeName);
+            if (sectionAttribute == null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + sectionAttribute + "\" does not exist.");
+            }
+
+            return sectionAttribute;
+        }
+
+        public Section GetSection(String sectionName)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            return section;
+        }
+
+        public Category GetCategory(String categoryName)
+        {
+            Category category = categories.Find(c => c.Name == categoryName);
+            if (category == null)
+            {
+                throw new ArgumentException("Given Category \"" + categoryName + "\" does not exist.");
+            }
+
+            return category;
+        }
+
+        #region HelperMethods
 
         private void ParseFileContents(String fileContents)
         {
@@ -486,5 +527,7 @@ namespace ConfigFile
         {
             return s.Replace("\"", "");
         }
+
+        #endregion
     }
 }

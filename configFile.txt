@@ -17,3 +17,12 @@ List<List<int>>: lli = {{1, 2, 3, 4}, {1, 2, 3, 4}};
 List<List<float>>: llf = {{3.14, 3.4}, {3.56}};
 List<List<double>>: lld = {{3.232323, 32.32323, 23.232323}, {3.333}};
 List<List<string>>: lls = {{"Hallo", "Welt"}, {"Zweite", "Sublist"}};
+
+[Animation: Idle]
+List<List<int>>: frames = {{10, 10, 100, 200}, {200, 200, 300, 300}};
+List<List<int>>: frameOffsets = {{1, 2}, {10, 5}};
+bool: mirrored = true;
+bool: looped = false;
+
+[Animation: Attack]
+int: damage = 102;
