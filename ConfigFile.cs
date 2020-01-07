@@ -4,9 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.IO;
+using System.Globalization;
 
 
-// TODO: Fehlendes Semikolon am Ende einer Sektion ist sehr schlecht. Komische Fehler, die nicht abgefangen werden.
+// TODO: Beim hinzufügen von neuen SectionAttributes ist nicht gegeben das der gegebene EType und der gegebene Value
+//       übereinstimmen.
+
+// TODO: Falls in der Datei ein SectionAttribute einen Value mit falscher Syntax hat, sollte ein entsprechender Fehler
+//       mit Ort und Art des Fehlers geschmissen werden.
 
 namespace ConfigFile
 {
@@ -48,7 +53,7 @@ namespace ConfigFile
         {
             // TODO: Benutze anstatt "Value.ToString()" hier später die Methode,
             //       die in Stringformat der Datei umwandelt für einheitlichkeit.
-            return Type.ToString() + ": " + Name + " = " + Value.ToString() + ";";
+            return ConfigFile.SectionAttributeToString(this);
         }
     }
 
@@ -97,6 +102,8 @@ namespace ConfigFile
 
     public class ConfigFile
     {
+        private String path;
+
         private List<Section> sections = new List<Section>();
         private List<Category> categories = new List<Category>();
 
@@ -123,8 +130,14 @@ namespace ConfigFile
 
         public ConfigFile(String path)
         {
+            this.path = path;
+
             ParseFileContents(File.ReadAllText(path));
         }
+
+        #region PublicInterface
+
+        #region SectionAttribute
 
         public SectionAttribute GetSectionAttribute(String sectionName, String attributeName)
         {
@@ -143,6 +156,184 @@ namespace ConfigFile
             return sectionAttribute;
         }
 
+        public void ChangeSectionAttribute(String sectionName, String attributeName, SectionAttribute newAttribute, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            SectionAttribute existingAttribute = section.Attributes.Find(a => a.Name == attributeName);
+            if (existingAttribute == null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + attributeName + "\" does not exist in Section \"" +
+                                            sectionName + "\".");
+            }
+
+            // Renaming existingAttribute.
+            if (existingAttribute.Name != newAttribute.Name)
+            {
+                // We can't rename to an already existing name.
+                if (section.Attributes.Find(a => a.Name == newAttribute.Name) != null)
+                {
+                    throw new ArgumentException("Given SectionAttribute \"" + newAttribute.Name + "\" already exists in Section" +
+                                                "\"" + sectionName + "\".");
+                }
+            }
+
+            existingAttribute.Name = newAttribute.Name;
+            existingAttribute.Type = newAttribute.Type;
+            existingAttribute.Value = newAttribute.Value;
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttribute(String sectionName, String attributeName, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            SectionAttribute existingAttribute = section.Attributes.Find(a => a.Name == attributeName);
+            if (existingAttribute == null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + attributeName + "\" does not exist in Section \"" +
+                                            sectionName + "\".");
+            }
+            section.Attributes.Remove(existingAttribute);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeAt(String sectionName, int index, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+            section.Attributes.RemoveAt(index);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeRange(String sectionName, int index, int count, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            section.Attributes.RemoveRange(index, count);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void AppendSectionAttribute(String sectionName, SectionAttribute newAttribute, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+
+            SectionAttribute existingAttribute = section.Attributes.Find(a => a.Name == newAttribute.Name);
+            if (existingAttribute != null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + newAttribute.Name + "\" already exists in given" +
+                                            "Section \"" + sectionName + "\".");
+            }
+
+            section.Attributes.Add(newAttribute);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void AppendSectionAttributeRange(String sectionName, List<SectionAttribute> newAttributes, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            // Do the newAttributes and the existing Attributes in the given Section have a SectionAttribute
+            // with the same name (i.e. the same SectionAttribute).
+            if (newAttributes.Select(a => a.Name).Intersect(section.Attributes.Select(a => a.Name)).Any())
+            {
+                throw new ArgumentException("Given SectionAttributes contain a SectionAttribute that is already in the given Section \"" + sectionName + "\".");
+            }
+
+            section.Attributes.AddRange(newAttributes);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void InsertSectionAttribute(String sectionName, int index, SectionAttribute newAttribute, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            if (section.Attributes.Find(a => a.Name == newAttribute.Name) != null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + newAttribute.Name + "\" already exists in Section" +
+                                                "\"" + sectionName + "\".");
+            }
+
+            section.Attributes.Insert(index, newAttribute);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void InsertSectionAttributeRange(String sectionName, int index, List<SectionAttribute> newAttributes, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            section.Attributes.InsertRange(index, newAttributes);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        #endregion
+
+        #region Section
+
         public Section GetSection(String sectionName)
         {
             Section section = sections.Find(s => s.Name == sectionName);
@@ -153,6 +344,34 @@ namespace ConfigFile
 
             return section;
         }
+
+        public void ChangeSection(String sectionName, Section newSection, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            if (sectionName != newSection.Name)
+            {
+                if (sections.Find(s => s.Name == newSection.Name) != null)
+                {
+                    throw new ArgumentException("Given newSection \"" + newSection.Name + "\" already exists in this ConfigFile.");
+                }
+            }
+
+            section.Category = newSection.Category;
+            section.Name = newSection.Name;
+            section.Attributes = newSection.Attributes;
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        #endregion
 
         public Category GetCategory(String categoryName)
         {
@@ -165,7 +384,262 @@ namespace ConfigFile
             return category;
         }
 
-        #region HelperMethods
+        public void WriteSectionsToFile()
+        {
+            String fileContents = "\n";
+
+            foreach (Section section in sections)
+            {
+                fileContents += SectionToString(section) + "\n";
+            }
+
+            fileContents = fileContents.Remove(fileContents.Length - 1, 1);
+
+            File.WriteAllText(path, fileContents);
+        }
+
+        #endregion
+
+        #region PrivateImplementationDetails
+
+        private String SectionToString(Section section)
+        {
+            String sectionString;
+            if (section.Category == null)
+            {
+                sectionString = "[" + section.Name + "]\n";
+            }
+            else
+            {
+                sectionString = "[" + section.Category + ": " + section.Name + "]\n";
+            }
+
+            foreach (SectionAttribute sectionAttribute in section.Attributes)
+            {
+                sectionString += SectionAttributeToString(sectionAttribute) + "\n";
+            }
+
+            return sectionString;
+        }
+
+        public static String SectionAttributeToString(SectionAttribute sectionAttribute)
+        {
+            String typeString = stringToType.FirstOrDefault(s => s.Value == sectionAttribute.Type).Key;
+            String valueString = ValueToString(sectionAttribute.Value, sectionAttribute.Type);
+
+            return typeString + ": " + sectionAttribute.Name + " = " + valueString + ";";
+        }
+
+        private static String ValueToString(Object value, EType type)
+        {
+            String returnValue;
+
+            if (type == EType.LIST_BOOL ||
+                type == EType.LIST_INT ||
+                type == EType.LIST_FLOAT ||
+                type == EType.LIST_DOUBLE ||
+                type == EType.LIST_STRING)
+            {
+                returnValue = ListToString(value, type);
+            }
+            else if (type == EType.LIST_LIST_BOOL ||
+                     type == EType.LIST_LIST_INT ||
+                     type == EType.LIST_LIST_FLOAT ||
+                     type == EType.LIST_LIST_DOUBLE ||
+                     type == EType.LIST_LIST_STRING)
+            {
+                returnValue = List2dToString(value, type);
+            }
+            else
+            {
+                switch (type)
+                {
+                    case EType.BOOL:
+                        {
+                            returnValue = BoolToString((bool)value);
+                            break;
+                        }
+                    case EType.INT:
+                        {
+                            returnValue = IntToString((int)value);
+                            break;
+                        }
+                    case EType.FLOAT:
+                        {
+                            returnValue = FloatToString((float)value);
+                            break;
+                        }
+                    case EType.DOUBLE:
+                        {
+                            returnValue = DoubleToString((double)value);
+                            break;
+                        }
+                    case EType.STRING:
+                        {
+                            returnValue = StringToFileString((string)value);
+                            break;
+                        }
+                    default:
+                        throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
+                }
+            }
+            return returnValue;
+        }
+
+        private static String ListToString(Object value, EType type)
+        {
+            String listString = "{";
+
+            switch (type)
+            {
+                case EType.LIST_BOOL:
+                    {
+                        List<bool> list = (List<bool>)value;
+                        foreach (bool b in list)
+                        {
+                            listString += BoolToString(b) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_INT:
+                    {
+                        List<int> list = (List<int>)value;
+                        foreach (int i in list)
+                        {
+                            listString += IntToString(i) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_FLOAT:
+                    {
+                        List<float> list = (List<float>)value;
+                        foreach (float f in list)
+                        {
+                            listString += FloatToString(f) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_DOUBLE:
+                    {
+                        List<double> list = (List<double>)value;
+                        foreach (float f in list)
+                        {
+                            listString += FloatToString(f) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_STRING:
+                    {
+                        List<string> list = (List<string>)value;
+                        foreach (string s in list)
+                        {
+                            listString += StringToFileString(s) + ", ";
+                        }
+
+
+                        break;
+                    }
+
+                default:
+                    throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a valid list type.");
+            }
+
+            listString = listString.Remove(listString.Length - 2);
+            listString += "}";
+            return listString;
+        }
+
+        private static String List2dToString(Object value, EType type)
+        {
+            String listString = "{";
+
+            switch (type)
+            {
+                case EType.LIST_LIST_BOOL:
+                    {
+                        List<List<bool>> list2d = (List<List<bool>>)value;
+                        foreach (List<bool> bools in list2d)
+                        {
+                            listString += ListToString(bools, EType.LIST_BOOL) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_LIST_INT:
+                    {
+                        List<List<int>> list2d = (List<List<int>>)value;
+                        foreach (List<int> ints in list2d)
+                        {
+                            listString += ListToString(ints, EType.LIST_INT) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_LIST_FLOAT:
+                    {
+                        List<List<float>> list2d = (List<List<float>>)value;
+                        foreach (List<float> floats in list2d)
+                        {
+                            listString += ListToString(floats, EType.LIST_FLOAT) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_LIST_DOUBLE:
+                    {
+                        List<List<double>> list2d = (List<List<double>>)value;
+                        foreach (List<double> doubles in list2d)
+                        {
+                            listString += ListToString(doubles, EType.LIST_DOUBLE) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_LIST_STRING:
+                    {
+                        List<List<string>> list2d = (List<List<string>>)value;
+                        foreach (List<string> strings in list2d)
+                        {
+                            listString += ListToString(strings, EType.LIST_STRING) + ", ";
+                        }
+
+                        break;
+                    }
+            }
+
+            listString = listString.Remove(listString.Length - 2);
+            listString += "}";
+            return listString;
+        }
+
+        private static String BoolToString(bool b)
+        {
+            return b ? "true" : "false";
+        }
+
+        private static String IntToString(int i)
+        {
+            return i.ToString();
+        }
+
+        private static String FloatToString(float f)
+        {
+            return f.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static String DoubleToString(double d)
+        {
+            return d.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static String StringToFileString(string s)
+        {
+            return "\"" + s + "\"";
+        }
 
         private void ParseFileContents(String fileContents)
         {
@@ -280,7 +754,7 @@ namespace ConfigFile
             int indexSemicolon = attributeString.IndexOf(';');
 
             String typeString = attributeString.Substring(0, indexDoubleColon);
-            name = attributeString.Substring(indexDoubleColon + 1, indexEquals - (indexDoubleColon + 1)); 
+            name = attributeString.Substring(indexDoubleColon + 1, indexEquals - (indexDoubleColon + 1));
             String valueString = attributeString.Substring(indexEquals + 1, indexSemicolon - (indexEquals + 1));
 
             if (!stringToType.TryGetValue(typeString, out type))
@@ -288,26 +762,26 @@ namespace ConfigFile
                 throw new ArgumentException("Given type \"" + typeString + "\" does not exist.");
             }
 
-            value = StringToType(valueString, type);
+            value = StringToValue(valueString, type);
 
             return new SectionAttribute(name, value, type);
         }
 
-        private Object StringToType(String s, EType type)
+        private Object StringToValue(String s, EType type)
         {
             Object returnValue;
 
-            if (type == EType.LIST_BOOL   ||
-                type == EType.LIST_INT    ||
-                type == EType.LIST_FLOAT  ||
+            if (type == EType.LIST_BOOL ||
+                type == EType.LIST_INT ||
+                type == EType.LIST_FLOAT ||
                 type == EType.LIST_DOUBLE ||
                 type == EType.LIST_STRING)
             {
                 returnValue = ListStringToType(s, type);
             }
-            else if (type == EType.LIST_LIST_BOOL   ||
-                     type == EType.LIST_LIST_INT    ||
-                     type == EType.LIST_LIST_FLOAT  ||
+            else if (type == EType.LIST_LIST_BOOL ||
+                     type == EType.LIST_LIST_INT ||
+                     type == EType.LIST_LIST_FLOAT ||
                      type == EType.LIST_LIST_DOUBLE ||
                      type == EType.LIST_LIST_STRING)
             {
@@ -354,7 +828,7 @@ namespace ConfigFile
 
             String[] elements = s.Split(',');
 
-            switch(type)
+            switch (type)
             {
                 case EType.LIST_BOOL:
                     {
@@ -432,18 +906,18 @@ namespace ConfigFile
             s = s.Remove(s.Length - 1, 1);
 
             String[] elements = s.Split(new String[] { "}," }, StringSplitOptions.None);
-            
+
             for (int i = 0; i < elements.Length - 1; ++i)
             {
                 elements[i] += "}";
             }
 
-            switch(type)
+            switch (type)
             {
                 case EType.LIST_LIST_BOOL:
                     {
                         List<List<bool>> listOfLists = new List<List<bool>>();
-                        foreach(String listString in elements)
+                        foreach (String listString in elements)
                         {
                             listOfLists.Add((List<bool>)ListStringToType(listString, EType.LIST_BOOL));
                         }
