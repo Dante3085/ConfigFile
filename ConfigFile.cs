@@ -13,6 +13,11 @@ using System.Globalization;
 // TODO: Falls in der Datei ein SectionAttribute einen Value mit falscher Syntax hat, sollte ein entsprechender Fehler
 //       mit Ort und Art des Fehlers geschmissen werden.
 
+// TODO: Veränderung von Categorys, Sections und SectionAttributes über die einfachen Get-Methoden ist schlecht.
+//       Es sollten nur explizite Manipulationsmethoden wie AppendSectionAttribute() verwendet werden.
+
+// TODO: Manipulationsmethoden für Category und Section.
+
 namespace ConfigFile
 {
     public enum EType
@@ -85,6 +90,8 @@ namespace ConfigFile
 
     public class Category
     {
+        private String name;
+
         public String Name { get; set; }
         public List<Section> Sections { get; set; }
 
@@ -432,6 +439,11 @@ namespace ConfigFile
 
         private static String ValueToString(Object value, EType type)
         {
+            if (value == null)
+            {
+                return "NULL";
+            }
+
             String returnValue;
 
             if (type == EType.LIST_BOOL ||
@@ -679,7 +691,7 @@ namespace ConfigFile
                 // Found new SectionAttribute
                 else if (indexNextSemiColon != -1)
                 {
-                    currentSection.Attributes.Add(ParseSectionAttribute(fileContents.Substring(0, indexNextSemiColon + 1), currentSection.Name));
+                    currentSection.Attributes.Add(ParseSectionAttribute(fileContents.Substring(0, indexNextSemiColon + 1), currentSection));
                     fileContents = fileContents.Remove(0, indexNextSemiColon + 1);
                 }
 
@@ -734,7 +746,7 @@ namespace ConfigFile
             }
         }
 
-        private SectionAttribute ParseSectionAttribute(String attributeString, String sectionName)
+        private SectionAttribute ParseSectionAttribute(String attributeString, Section currentSection)
         {
             int numDoubleColons = attributeString.Count(c => c == ':'); ;
             int numEquals = attributeString.Count(c => c == '=');
@@ -742,7 +754,8 @@ namespace ConfigFile
 
             if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
             {
-                throw new ArgumentException("Syntax error in one or more SectionAttributes in Section \"" + sectionName + "\".");
+                throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name + 
+                                            "\" in Section \"" + currentSection.Name + "\".");
             }
 
             EType type;
@@ -769,6 +782,11 @@ namespace ConfigFile
 
         private Object StringToValue(String s, EType type)
         {
+            if (s == "NULL")
+            {
+                return null;
+            }
+
             Object returnValue;
 
             if (type == EType.LIST_BOOL ||
@@ -777,7 +795,7 @@ namespace ConfigFile
                 type == EType.LIST_DOUBLE ||
                 type == EType.LIST_STRING)
             {
-                returnValue = ListStringToType(s, type);
+                returnValue = ListStringToValue(s, type);
             }
             else if (type == EType.LIST_LIST_BOOL ||
                      type == EType.LIST_LIST_INT ||
@@ -785,7 +803,7 @@ namespace ConfigFile
                      type == EType.LIST_LIST_DOUBLE ||
                      type == EType.LIST_LIST_STRING)
             {
-                returnValue = List2dStringToType(s, type);
+                returnValue = List2dStringToValue(s, type);
             }
             else
             {
@@ -819,7 +837,7 @@ namespace ConfigFile
             return returnValue;
         }
 
-        private Object ListStringToType(String s, EType type)
+        private Object ListStringToValue(String s, EType type)
         {
             Object returnValue = null;
 
@@ -898,7 +916,7 @@ namespace ConfigFile
             return returnValue;
         }
 
-        private Object List2dStringToType(String s, EType type)
+        private Object List2dStringToValue(String s, EType type)
         {
             Object returnValue = null;
 
@@ -919,7 +937,7 @@ namespace ConfigFile
                         List<List<bool>> listOfLists = new List<List<bool>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<bool>)ListStringToType(listString, EType.LIST_BOOL));
+                            listOfLists.Add((List<bool>)ListStringToValue(listString, EType.LIST_BOOL));
                         }
                         returnValue = listOfLists;
 
@@ -930,7 +948,7 @@ namespace ConfigFile
                         List<List<int>> listOfLists = new List<List<int>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<int>)ListStringToType(listString, EType.LIST_INT));
+                            listOfLists.Add((List<int>)ListStringToValue(listString, EType.LIST_INT));
                         }
                         returnValue = listOfLists;
 
@@ -941,7 +959,7 @@ namespace ConfigFile
                         List<List<float>> listOfLists = new List<List<float>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<float>)ListStringToType(listString, EType.LIST_FLOAT));
+                            listOfLists.Add((List<float>)ListStringToValue(listString, EType.LIST_FLOAT));
                         }
                         returnValue = listOfLists;
 
@@ -952,7 +970,7 @@ namespace ConfigFile
                         List<List<double>> listOfLists = new List<List<double>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<double>)ListStringToType(listString, EType.LIST_DOUBLE));
+                            listOfLists.Add((List<double>)ListStringToValue(listString, EType.LIST_DOUBLE));
                         }
                         returnValue = listOfLists;
 
@@ -963,7 +981,7 @@ namespace ConfigFile
                         List<List<string>> listOfLists = new List<List<string>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<string>)ListStringToType(listString, EType.LIST_STRING));
+                            listOfLists.Add((List<string>)ListStringToValue(listString, EType.LIST_STRING));
                         }
                         returnValue = listOfLists;
 
