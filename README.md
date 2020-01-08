@@ -1,5 +1,5 @@
 # ConfigFile
-The ConfigFile is a Windows INI inspired file format for reading and writing arbitrary data using the C# Programming language. It is primary developed for a  MonoGame game project by the name of "ProjectSpace", developed by the SpaceRavers. <br />
+The ConfigFile is a Windows INI inspired file format for reading and writing basic data of the C# Programming language. It is primary developed for a  MonoGame game project by the name of "ProjectSpace", developed by the SpaceRavers. <br />
 The following gives an example for the ConfigFile file format...
 
 [Category1: Section1] <br />
