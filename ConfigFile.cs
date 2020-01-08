@@ -18,6 +18,9 @@ using System.Globalization;
 
 // TODO: Manipulationsmethoden für Category und Section.
 
+// TODO: Diese Klasse ist viel zu lang und hat zu viel Redundanten Code. Debugging der StringToValue() und ValueToString()
+// Abläufe ist auch schwer.
+
 namespace ConfigFile
 {
     public enum EType
@@ -66,13 +69,25 @@ namespace ConfigFile
     {
         public String Name { get; set; }
         public String Category { get; set; }
-        public List<SectionAttribute> Attributes { get; set; }
+        public List<SectionAttribute> Attributes 
+        {
+            get;
+            set; 
+        }
 
-        public Section(String name, String category)
+        public Section(String name, String category, List<SectionAttribute> attributes = null)
         {
             Name = name;
             Category = category;
-            Attributes = new List<SectionAttribute>();
+
+            if (attributes == null)
+            {
+                Attributes = new List<SectionAttribute>();
+            }
+            else
+            {
+                Attributes = attributes;
+            }
         }
 
         public override string ToString()
@@ -90,8 +105,6 @@ namespace ConfigFile
 
     public class Category
     {
-        private String name;
-
         public String Name { get; set; }
         public List<Section> Sections { get; set; }
 
@@ -329,6 +342,11 @@ namespace ConfigFile
                 throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
             }
 
+            if (newAttributes.Select(a => a.Name).Intersect(section.Attributes.Select(a => a.Name)).Any())
+            {
+                throw new ArgumentException("Given SectionAttributes contain a SectionAttribute that is already in the given Section \"" + sectionName + "\".");
+            }
+
             section.Attributes.InsertRange(index, newAttributes);
 
             if (writeToFile)
@@ -378,6 +396,29 @@ namespace ConfigFile
             }
         }
 
+        public void ChangeSectionHeader(String sectionName, String newCategoryName = null, String newSectionName = null, bool writeToFile = true)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            if (newCategoryName != null)
+            {
+                section.Category = newCategoryName;
+            }
+            else if (newSectionName != null)
+            {
+                section.Name = newSectionName;
+            }
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
         #endregion
 
         public Category GetCategory(String categoryName)
@@ -402,7 +443,12 @@ namespace ConfigFile
 
             fileContents = fileContents.Remove(fileContents.Length - 1, 1);
 
-            File.WriteAllText(path, fileContents);
+            // TODO: Wenn hier kein Encoding eingetragen oder Encoding.Default genommen wird,
+            // führt das manchmal dazu das in SublimeText3 Zeichen nicht angezeigt werden.
+            // Eckige Klammer und ein paar normale Buchstaben. In anderen Texteditoren sind
+            // diese Zeichen zunächst noch da. Bei wiederholtem WriteSectionsToFile() verschwinden
+            // dann aber auch immer mehr Zeichen da. Ich weiß nicht genau warum dieses Problem besteht.
+            File.WriteAllText(path, fileContents, System.Text.Encoding.UTF8);
         }
 
         #endregion
@@ -560,7 +606,10 @@ namespace ConfigFile
                     throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a valid list type.");
             }
 
-            listString = listString.Remove(listString.Length - 2);
+            if (listString.Contains(','))
+            {
+                listString = listString.Remove(listString.Length - 2);
+            }
             listString += "}";
             return listString;
         }
@@ -623,7 +672,10 @@ namespace ConfigFile
                     }
             }
 
-            listString = listString.Remove(listString.Length - 2);
+            if (listString.Contains(','))
+            {
+                listString = listString.Remove(listString.Length - 2);
+            }
             listString += "}";
             return listString;
         }
@@ -754,7 +806,7 @@ namespace ConfigFile
 
             if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
             {
-                throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name + 
+                throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name +
                                             "\" in Section \"" + currentSection.Name + "\".");
             }
 
@@ -841,6 +893,12 @@ namespace ConfigFile
         {
             Object returnValue = null;
 
+            bool emptyList = false;
+            if (s == "{}")
+            {
+                emptyList = true;
+            }
+
             s = s.Remove(0, 1);
             s = s.Remove(s.Length - 1, 1);
 
@@ -850,6 +908,9 @@ namespace ConfigFile
             {
                 case EType.LIST_BOOL:
                     {
+                        if (emptyList)
+                            return new List<bool>();
+
                         List<bool> list = new List<bool>();
                         foreach (String boolString in elements)
                         {
@@ -862,6 +923,9 @@ namespace ConfigFile
 
                 case EType.LIST_INT:
                     {
+                        if (emptyList)
+                            return new List<int>();
+
                         List<int> list = new List<int>();
                         foreach (String intString in elements)
                         {
@@ -874,6 +938,9 @@ namespace ConfigFile
 
                 case EType.LIST_FLOAT:
                     {
+                        if (emptyList)
+                            return new List<float>();
+
                         List<float> list = new List<float>();
                         foreach (String floatString in elements)
                         {
@@ -886,6 +953,9 @@ namespace ConfigFile
 
                 case EType.LIST_DOUBLE:
                     {
+                        if (emptyList)
+                            return new List<double>();
+
                         List<double> list = new List<double>();
                         foreach (String doubleString in elements)
                         {
@@ -898,6 +968,9 @@ namespace ConfigFile
 
                 case EType.LIST_STRING:
                     {
+                        if (emptyList)
+                            return new List<string>();
+
                         // TODO: Dämliche Bennenung StringToString und stringString.
                         List<string> list = new List<string>();
                         foreach (String stringString in elements)
