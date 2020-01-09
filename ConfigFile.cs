@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.IO;
 using System.Globalization;
+using System.Text;
 
 
 // TODO: Beim hinzufügen von neuen SectionAttributes ist nicht gegeben das der gegebene EType und der gegebene Value
@@ -20,6 +21,9 @@ using System.Globalization;
 
 // TODO: Diese Klasse ist viel zu lang und hat zu viel Redundanten Code. Debugging der StringToValue() und ValueToString()
 // Abläufe ist auch schwer.
+
+// LESSON: String Konkatenation in Schleifen ist schleeeeeeeecht. Falls Strings in der gegebenen Sprache immutable sind,
+//         werden sie immer kopiert und neu erzeugt.
 
 namespace ConfigFile
 {
@@ -126,6 +130,8 @@ namespace ConfigFile
 
         private List<Section> sections = new List<Section>();
         private List<Category> categories = new List<Category>();
+
+        private static int estimatedCharactersPerSectionString = 150;
 
         private static Dictionary<String, EType> stringToType = new Dictionary<string, EType>()
         {
@@ -419,6 +425,26 @@ namespace ConfigFile
             }
         }
 
+        public void AppendSection(Section section, bool writeToFile = true)
+        {
+            if (sections.Find(s => s.Name == section.Name) != null)
+            {
+                throw new ArgumentException("Given Section \"" + section.Name + "\" already exists.");
+            }
+
+            sections.Add(section);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void AppendSectionRange(List<Section> sections, bool writeToFile = true)
+        {
+            throw new NotImplementedException();
+        }
+
         #endregion
 
         public Category GetCategory(String categoryName)
@@ -434,14 +460,23 @@ namespace ConfigFile
 
         public void WriteSectionsToFile()
         {
-            String fileContents = "\n";
+            // String fileContents = "\n";
+
+            StringBuilder sb = new StringBuilder(estimatedCharactersPerSectionString * sections.Count);
+            sb.Append("\n");
 
             foreach (Section section in sections)
             {
-                fileContents += SectionToString(section) + "\n";
+                sb.Append(SectionToString(section));
+                sb.Append("\n");
+
+                // fileContents += SectionToString(section) + "\n";
             }
 
+            String fileContents = sb.ToString();
             fileContents = fileContents.Remove(fileContents.Length - 1, 1);
+
+            // fileContents = fileContents.Remove(fileContents.Length - 1, 1);
 
             // TODO: Wenn hier kein Encoding eingetragen oder Encoding.Default genommen wird,
             // führt das manchmal dazu das in SublimeText3 Zeichen nicht angezeigt werden.
@@ -705,9 +740,13 @@ namespace ConfigFile
             return "\"" + s + "\"";
         }
 
+        // TODO: fileContents.Remove() durch StringBuilder ersetzen.
         private void ParseFileContents(String fileContents)
         {
             fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
+
+            if (fileContents == String.Empty)
+                return;
 
             // TODO: Remove Comments
 
@@ -762,7 +801,7 @@ namespace ConfigFile
             sections.Add(section);
             if (section.Category != null)
             {
-                Category category = categories.Find((c) => c.Name == section.Category);
+                Category category = categories.Find(c => c.Name == section.Category);
                 if (category != null)
                 {
                     category.Sections.Add(section);
