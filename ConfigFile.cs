@@ -740,7 +740,6 @@ namespace ConfigFile
             return "\"" + s + "\"";
         }
 
-        // TODO: fileContents.Remove() durch StringBuilder ersetzen.
         private void ParseFileContents(String fileContents)
         {
             fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
@@ -748,51 +747,51 @@ namespace ConfigFile
             if (fileContents == String.Empty)
                 return;
 
-            // TODO: Remove Comments
+            int currentStartIndex = 0;
 
-            int indexFirstClosingSquareBracket = fileContents.IndexOf(']');
-            Section currentSection = ParseSectionHeader(fileContents.Substring(0, indexFirstClosingSquareBracket + 1));
-            fileContents = fileContents.Remove(0, indexFirstClosingSquareBracket + 1);
+            int indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
+            int indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
+            int indexNextSemicolon = -1;
 
-            int previousFileContentsLength = fileContents.Length;
+            // Create Initial Section
+            Section currentSection = ParseSectionHeader(fileContents.Substring(indexNextOpenSquareBracket,
+                                                                               indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1)));
 
-            while (fileContents.Length != 0)
+            currentStartIndex = indexNextClosedSquareBracket + 1;
+
+            while(currentStartIndex != fileContents.Length)
             {
-                int indexNextClosingSquareBracket = fileContents.IndexOf(']');
-                int indexNextSemiColon = fileContents.IndexOf(';');
-                int indexNextEquals = fileContents.IndexOf('=');
+                indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
+                indexNextSemicolon = fileContents.IndexOf(';', currentStartIndex);
 
-                // Found new Section.
-                if ((indexNextClosingSquareBracket != -1) && indexNextClosingSquareBracket < indexNextSemiColon)
+                // Next Section
+                if (indexNextOpenSquareBracket != -1 &&
+                    (indexNextOpenSquareBracket - currentStartIndex) < (indexNextSemicolon - currentStartIndex))
                 {
-                    // Check if the last SectionAttribute of the currentSection has a missing semicolon. 
-                    if (indexNextEquals != -1 && indexNextEquals < indexNextClosingSquareBracket)
-                    {
-                        throw new ArgumentException("Last SectionAttribute of Section \"" + currentSection.Name + "\" has a missing semicolon(;).");
-                    }
-
-                    // Handle finished Section.
+                    // Add finished Section
                     AddSection(currentSection);
 
-                    // Create new Section.
-                    currentSection = ParseSectionHeader(fileContents.Substring(0, indexNextClosingSquareBracket + 1));
-                    fileContents = fileContents.Remove(0, indexNextClosingSquareBracket + 1);
+                    // Create new Section
+                    indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
+                    currentSection = ParseSectionHeader(fileContents.Substring(indexNextOpenSquareBracket,
+                                                                               indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1)));
+
+                    currentStartIndex = indexNextClosedSquareBracket + 1;
                 }
 
-                // Found new SectionAttribute
-                else if (indexNextSemiColon != -1)
+                // Next SectionAttribute
+                else
                 {
-                    currentSection.Attributes.Add(ParseSectionAttribute(fileContents.Substring(0, indexNextSemiColon + 1), currentSection));
-                    fileContents = fileContents.Remove(0, indexNextSemiColon + 1);
-                }
+                    SectionAttribute currentSectionAttribute = ParseSectionAttribute(fileContents.Substring(currentStartIndex,
+                                                                      indexNextSemicolon - (currentStartIndex - 1)), currentSection);
 
-                if (previousFileContentsLength == fileContents.Length)
-                {
-                    throw new ArgumentException("Last SectionAttribute in Section \"" + currentSection.Name + "\" is missing a semicolon(;).");
+                    currentSection.Attributes.Add(currentSectionAttribute);
+
+                    currentStartIndex = indexNextSemicolon + 1;
                 }
-                previousFileContentsLength = fileContents.Length;
             }
 
+            // Add last Section
             AddSection(currentSection);
         }
 
