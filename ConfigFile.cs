@@ -182,7 +182,7 @@ namespace ConfigFile
             return sectionAttribute;
         }
 
-        public void ChangeSectionAttribute(String sectionName, String attributeName, SectionAttribute newAttribute, bool writeToFile = true)
+        public void ChangeSectionAttribute(String sectionName, String attributeName, SectionAttribute newAttribute, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -218,60 +218,7 @@ namespace ConfigFile
             }
         }
 
-        public void RemoveSectionAttribute(String sectionName, String attributeName, bool writeToFile = true)
-        {
-            Section section = sections.Find(s => s.Name == sectionName);
-            if (section == null)
-            {
-                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
-            }
-
-            SectionAttribute existingAttribute = section.Attributes.Find(a => a.Name == attributeName);
-            if (existingAttribute == null)
-            {
-                throw new ArgumentException("Given SectionAttribute \"" + attributeName + "\" does not exist in Section \"" +
-                                            sectionName + "\".");
-            }
-            section.Attributes.Remove(existingAttribute);
-
-            if (writeToFile)
-            {
-                WriteSectionsToFile();
-            }
-        }
-
-        public void RemoveSectionAttributeAt(String sectionName, int index, bool writeToFile = true)
-        {
-            Section section = sections.Find(s => s.Name == sectionName);
-            if (section == null)
-            {
-                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
-            }
-            section.Attributes.RemoveAt(index);
-
-            if (writeToFile)
-            {
-                WriteSectionsToFile();
-            }
-        }
-
-        public void RemoveSectionAttributeRange(String sectionName, int index, int count, bool writeToFile = true)
-        {
-            Section section = sections.Find(s => s.Name == sectionName);
-            if (section == null)
-            {
-                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
-            }
-
-            section.Attributes.RemoveRange(index, count);
-
-            if (writeToFile)
-            {
-                WriteSectionsToFile();
-            }
-        }
-
-        public void AppendSectionAttribute(String sectionName, SectionAttribute newAttribute, bool writeToFile = true)
+        public void AppendSectionAttribute(String sectionName, SectionAttribute newAttribute, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -295,7 +242,7 @@ namespace ConfigFile
             }
         }
 
-        public void AppendSectionAttributeRange(String sectionName, List<SectionAttribute> newAttributes, bool writeToFile = true)
+        public void AppendSectionAttributeRange(String sectionName, List<SectionAttribute> newAttributes, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -318,7 +265,7 @@ namespace ConfigFile
             }
         }
 
-        public void InsertSectionAttribute(String sectionName, int index, SectionAttribute newAttribute, bool writeToFile = true)
+        public void InsertSectionAttribute(String sectionName, int index, SectionAttribute newAttribute, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -340,7 +287,7 @@ namespace ConfigFile
             }
         }
 
-        public void InsertSectionAttributeRange(String sectionName, int index, List<SectionAttribute> newAttributes, bool writeToFile = true)
+        public void InsertSectionAttributeRange(String sectionName, int index, List<SectionAttribute> newAttributes, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -354,6 +301,82 @@ namespace ConfigFile
             }
 
             section.Attributes.InsertRange(index, newAttributes);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeByName(String sectionName, String attributeName, bool writeToFile = false)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            SectionAttribute existingAttribute = section.Attributes.Find(a => a.Name == attributeName);
+            if (existingAttribute == null)
+            {
+                throw new ArgumentException("Given SectionAttribute \"" + attributeName + "\" does not exist in Section \"" +
+                                            sectionName + "\".");
+            }
+            section.Attributes.Remove(existingAttribute);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeAt(String sectionName, int index, bool writeToFile = false)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+            section.Attributes.RemoveAt(index);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeRangeByNames(String sectionName, List<String> attributeNames, bool writeToFile = false)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            List<String> difference = attributeNames.Except(section.Attributes.Select(a => a.Name)).ToList();
+            if (difference.Count != 0)
+            {
+                throw new ArgumentException("In the given AttributeNames there are SectionAttributes that don't exist in the given Section " +
+                                            "\"" + sectionName + "\". Those are " + ToString(difference));
+            }
+
+            section.Attributes.RemoveAll(a => attributeNames.Contains(a.Name));
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAttributeRangeAt(String sectionName, int index, int count, bool writeToFile = false)
+        {
+            Section section = sections.Find(s => s.Name == sectionName);
+            if (section == null)
+            {
+                throw new ArgumentException("Given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            section.Attributes.RemoveRange(index, count);
 
             if (writeToFile)
             {
@@ -376,7 +399,7 @@ namespace ConfigFile
             return section;
         }
 
-        public void ChangeSection(String sectionName, Section newSection, bool writeToFile = true)
+        public void ChangeSection(String sectionName, Section newSection, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -402,7 +425,7 @@ namespace ConfigFile
             }
         }
 
-        public void ChangeSectionHeader(String sectionName, String newCategoryName = null, String newSectionName = null, bool writeToFile = true)
+        public void ChangeSectionHeader(String sectionName, String newCategoryName = null, String newSectionName = null, bool writeToFile = false)
         {
             Section section = sections.Find(s => s.Name == sectionName);
             if (section == null)
@@ -425,7 +448,13 @@ namespace ConfigFile
             }
         }
 
-        public void AppendSection(Section section, bool writeToFile = true)
+        /// <summary>
+        /// Tip: Don't use this Section if you want to append a lot of Sections in a loop at once.
+        /// Rather use AppendSectionRange(). It's much faster.
+        /// </summary>
+        /// <param name="section"></param>
+        /// <param name="writeToFile"></param>
+        public void AppendSection(Section section, bool writeToFile = false)
         {
             if (sections.Find(s => s.Name == section.Name) != null)
             {
@@ -440,9 +469,103 @@ namespace ConfigFile
             }
         }
 
-        public void AppendSectionRange(List<Section> sections, bool writeToFile = true)
+        public void AppendSectionRange(List<Section> sections, bool writeToFile = false)
         {
-            throw new NotImplementedException();
+            // TODO: Diese Fehlerbehandlung mit Angabe der Sektionen auch bei den anderen Methoden machen.
+            List<String> namesCommonSections = this.sections.Select(s => s.Name).Intersect(sections.Select(s => s.Name)).ToList();
+            if (namesCommonSections.Count != 0)
+            {
+                throw new ArgumentException("There is one or more Sections in the given Sections that already exists in this ConfigFile. " +
+                                            "Those are " + ToString(namesCommonSections));
+            }
+
+            this.sections.AddRange(sections);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void InsertSection(int index, Section section, bool writeToFile = false)
+        {
+            if (sections.Find(s => s.Name == section.Name) != null)
+            {
+                throw new ArgumentException("Given Section \"" + section.Name + "\" already exists.");
+            }
+
+            sections.Insert(index, section);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void InsertSectionRange(int index, List<Section> sections, bool writeToFile = false)
+        {
+            List<String> namesCommonSections = this.sections.Select(s => s.Name).Intersect(sections.Select(s => s.Name)).ToList();
+            if (namesCommonSections.Count != 0)
+            {
+                throw new ArgumentException("There is one or more Sections in the given Sections that already exists in this ConfigFile. " +
+                                            "Those are " + ToString(namesCommonSections));
+            }
+
+            this.sections.InsertRange(index, sections);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionByName(String sectionName, bool writeToFile = false)
+        {
+            if (sections.RemoveAll(s => s.Name == sectionName) == 0)
+            {
+                throw new ArgumentException("The given Section \"" + sectionName + "\" does not exist.");
+            }
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionAt(int index, bool writeToFile = false)
+        {
+            sections.RemoveAt(index);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionRangeByNames(List<String> sectionNames, bool writeToFile = false)
+        {
+            List<String> difference = sectionNames.Except(sections.Select(s => s.Name)).ToList();
+            if (difference.Count != 0)
+            {
+                throw new ArgumentException("In the given SectionNames there are Sections that don't exist. Those are " + ToString(difference));
+            }
+
+            sections.RemoveAll(s => sectionNames.Contains(s.Name));
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveSectionRangeAt(int index, int count, bool writeToFile)
+        {
+            sections.RemoveRange(index, count);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
         }
 
         #endregion
@@ -456,6 +579,56 @@ namespace ConfigFile
             }
 
             return category;
+        }
+
+        public void ChangeCategoryName(String categoryName, String newCategoryName, bool writeToFile = false)
+        {
+            Category category = categories.Find(c => c.Name == categoryName);
+            if (category == null)
+            {
+                throw new ArgumentException("Given Category \"" + categoryName + "\" does not exist.");
+            }
+
+            category.Name = newCategoryName;
+            category.Sections.ForEach(s => s.Category = newCategoryName);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public void RemoveCategory(String categoryName, bool writeToFile = false)
+        {
+            Category category = categories.Find(c => c.Name == categoryName);
+            if (category == null)
+            {
+                throw new ArgumentException("Given Category \"" + categoryName + "\" does not exist.");
+            }
+
+            sections.RemoveAll(s => category.Sections.Contains(s));
+            categories.Remove(category);
+
+            if (writeToFile)
+            {
+                WriteSectionsToFile();
+            }
+        }
+
+        public String ToString<T>(List<T> list)
+        {
+            StringBuilder builder = new StringBuilder("{ ", list.Count /* times someEstimatedStringLength */);
+
+            foreach (T t in list)
+            {
+                builder.Append(t.ToString());
+                builder.Append(", ");
+            }
+
+            builder.Remove(builder.Length - 2, 1);
+            builder.Append("}");
+
+            return builder.ToString();
         }
 
         public void WriteSectionsToFile()
@@ -504,6 +677,8 @@ namespace ConfigFile
 
             foreach (SectionAttribute sectionAttribute in section.Attributes)
             {
+                // TODO: Lieber StringBuilder. Das wird sonst sehr langsam, wenn eine Section
+                // viele Attribute hat.
                 sectionString += SectionAttributeToString(sectionAttribute) + "\n";
             }
 
@@ -742,7 +917,9 @@ namespace ConfigFile
 
         private void ParseFileContents(String fileContents)
         {
-            fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
+            // fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
+            fileContents = fileContents.Replace("\n", String.Empty);
+            fileContents = fileContents.Replace(" ", String.Empty);
 
             if (fileContents == String.Empty)
                 return;
