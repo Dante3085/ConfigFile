@@ -1007,6 +1007,7 @@ namespace ConfigFile
         {
             // fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
             fileContents = fileContents.Replace("\n", String.Empty);
+            fileContents = fileContents.Replace("\r", String.Empty);
             fileContents = fileContents.Replace(" ", String.Empty);
 
             if (fileContents == String.Empty)
