@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.Globalization;
 using System.Text;
+using Microsoft.Xna.Framework;
 
 
 // TODO: Beim hinzufügen von neuen SectionAttributes ist nicht gegeben das der gegebene EType und der gegebene Value
@@ -34,18 +35,24 @@ namespace ConfigFile
         FLOAT,
         DOUBLE,
         STRING,
+        VECTOR2,
+        RECTANGLE,
 
         LIST_BOOL,
         LIST_INT,
         LIST_FLOAT,
         LIST_DOUBLE,
         LIST_STRING,
+        LIST_VECTOR2,
+        LIST_RECTANGLE,
 
         LIST_LIST_BOOL,
         LIST_LIST_INT,
         LIST_LIST_FLOAT,
         LIST_LIST_DOUBLE,
         LIST_LIST_STRING,
+        LIST_LIST_VECTOR2,
+        LIST_LIST_RECTANGLE,
     }
 
     public class SectionAttribute
@@ -61,6 +68,13 @@ namespace ConfigFile
             Type = type;
         }
 
+        public SectionAttribute(SectionAttribute sectionAttribute)
+        {
+            Name = sectionAttribute.Name;
+            Value = sectionAttribute.Value;
+            Type = sectionAttribute.Type;
+        }
+
         public override string ToString()
         {
             // TODO: Benutze anstatt "Value.ToString()" hier später die Methode,
@@ -73,10 +87,10 @@ namespace ConfigFile
     {
         public String Name { get; set; }
         public String Category { get; set; }
-        public List<SectionAttribute> Attributes 
+        public List<SectionAttribute> Attributes
         {
             get;
-            set; 
+            set;
         }
 
         public Section(String name, String category, List<SectionAttribute> attributes = null)
@@ -140,18 +154,24 @@ namespace ConfigFile
             { "float", EType.FLOAT },
             { "double", EType.DOUBLE },
             { "string", EType.STRING },
+            { "Vector2", EType.VECTOR2 },
+            { "Rectangle", EType.RECTANGLE },
 
             { "List<bool>", EType.LIST_BOOL },
             { "List<int>", EType.LIST_INT },
             { "List<float>", EType.LIST_FLOAT },
             { "List<double>", EType.LIST_DOUBLE },
             { "List<string>", EType.LIST_STRING },
+            { "List<Vector2>", EType.LIST_VECTOR2 },
+            { "List<Rectangle>", EType.LIST_RECTANGLE },
 
             { "List<List<bool>>", EType.LIST_LIST_BOOL },
             { "List<List<int>>", EType.LIST_LIST_INT },
             { "List<List<float>>", EType.LIST_LIST_FLOAT },
             { "List<List<double>>", EType.LIST_LIST_DOUBLE },
             { "List<List<string>>", EType.LIST_LIST_STRING },
+            { "List<List<Vector2>>", EType.LIST_LIST_VECTOR2 },
+            { "List<List<Rectangle>>", EType.LIST_LIST_RECTANGLE },
         };
 
         public ConfigFile(String path)
@@ -570,6 +590,8 @@ namespace ConfigFile
 
         #endregion
 
+        #region Category
+
         public Category GetCategory(String categoryName)
         {
             Category category = categories.Find(c => c.Name == categoryName);
@@ -614,6 +636,8 @@ namespace ConfigFile
                 WriteSectionsToFile();
             }
         }
+
+        #endregion
 
         public String ToString<T>(List<T> list)
         {
@@ -706,7 +730,9 @@ namespace ConfigFile
                 type == EType.LIST_INT ||
                 type == EType.LIST_FLOAT ||
                 type == EType.LIST_DOUBLE ||
-                type == EType.LIST_STRING)
+                type == EType.LIST_STRING ||
+                type == EType.LIST_VECTOR2 ||
+                type == EType.LIST_RECTANGLE)
             {
                 returnValue = ListToString(value, type);
             }
@@ -714,7 +740,9 @@ namespace ConfigFile
                      type == EType.LIST_LIST_INT ||
                      type == EType.LIST_LIST_FLOAT ||
                      type == EType.LIST_LIST_DOUBLE ||
-                     type == EType.LIST_LIST_STRING)
+                     type == EType.LIST_LIST_STRING ||
+                     type == EType.LIST_LIST_VECTOR2 ||
+                     type == EType.LIST_LIST_RECTANGLE)
             {
                 returnValue = List2dToString(value, type);
             }
@@ -745,6 +773,16 @@ namespace ConfigFile
                     case EType.STRING:
                         {
                             returnValue = StringToFileString((string)value);
+                            break;
+                        }
+                    case EType.VECTOR2:
+                        {
+                            returnValue = Vector2ToString((Vector2)value);
+                            break;
+                        }
+                    case EType.RECTANGLE:
+                        {
+                            returnValue = RectangleToString((Rectangle)value);
                             break;
                         }
                     default:
@@ -808,6 +846,26 @@ namespace ConfigFile
                             listString += StringToFileString(s) + ", ";
                         }
 
+
+                        break;
+                    }
+                case EType.LIST_VECTOR2:
+                    {
+                        List<Vector2> list = (List<Vector2>)value;
+                        foreach (Vector2 v in list)
+                        {
+                            listString += Vector2ToString(v) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_RECTANGLE:
+                    {
+                        List<Rectangle> list = (List<Rectangle>)value;
+                        foreach (Rectangle r in list)
+                        {
+                            listString += RectangleToString(r) + ", ";
+                        }
 
                         break;
                     }
@@ -880,6 +938,26 @@ namespace ConfigFile
 
                         break;
                     }
+                case EType.LIST_LIST_VECTOR2:
+                    {
+                        List<List<Vector2>> list2d = (List<List<Vector2>>)value;
+                        foreach (List<Vector2> vecs in list2d)
+                        {
+                            listString += ListToString(vecs, EType.LIST_VECTOR2) + ", ";
+                        }
+
+                        break;
+                    }
+                case EType.LIST_LIST_RECTANGLE:
+                    {
+                        List<List<Rectangle>> list2d = (List<List<Rectangle>>)value;
+                        foreach (List<Rectangle> recs in list2d)
+                        {
+                            listString += ListToString(recs, EType.LIST_RECTANGLE) + ", ";
+                        }
+
+                        break;
+                    }
             }
 
             if (listString.Contains(','))
@@ -915,6 +993,16 @@ namespace ConfigFile
             return "\"" + s + "\"";
         }
 
+        private static String Vector2ToString(Vector2 v)
+        {
+            return "(" + FloatToString(v.X) + ", " + FloatToString(v.Y) + ")";
+        }
+
+        private static String RectangleToString(Rectangle r)
+        {
+            return "(" + r.X + ", " + r.Y + ", " + r.Width + ", " + r.Height + ")";
+        }
+
         private void ParseFileContents(String fileContents)
         {
             // fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
@@ -936,7 +1024,7 @@ namespace ConfigFile
 
             currentStartIndex = indexNextClosedSquareBracket + 1;
 
-            while(currentStartIndex != fileContents.Length)
+            while (currentStartIndex != fileContents.Length)
             {
                 indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
                 indexNextSemicolon = fileContents.IndexOf(';', currentStartIndex);
@@ -1060,7 +1148,9 @@ namespace ConfigFile
                 type == EType.LIST_INT ||
                 type == EType.LIST_FLOAT ||
                 type == EType.LIST_DOUBLE ||
-                type == EType.LIST_STRING)
+                type == EType.LIST_STRING ||
+                type == EType.LIST_VECTOR2 ||
+                type == EType.LIST_RECTANGLE)
             {
                 returnValue = ListStringToValue(s, type);
             }
@@ -1068,7 +1158,9 @@ namespace ConfigFile
                      type == EType.LIST_LIST_INT ||
                      type == EType.LIST_LIST_FLOAT ||
                      type == EType.LIST_LIST_DOUBLE ||
-                     type == EType.LIST_LIST_STRING)
+                     type == EType.LIST_LIST_STRING ||
+                     type == EType.LIST_LIST_VECTOR2 ||
+                     type == EType.LIST_LIST_RECTANGLE)
             {
                 returnValue = List2dStringToValue(s, type);
             }
@@ -1096,6 +1188,14 @@ namespace ConfigFile
                         returnValue = StringToString(s);
                         break;
 
+                    case EType.VECTOR2:
+                        returnValue = StringToVector2(s);
+                        break;
+
+                    case EType.RECTANGLE:
+                        returnValue = StringToRectangle(s);
+                        break;
+
                     default:
                         throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
                 }
@@ -1114,10 +1214,24 @@ namespace ConfigFile
                 emptyList = true;
             }
 
+            // Remove '{' and '}'
             s = s.Remove(0, 1);
             s = s.Remove(s.Length - 1, 1);
 
-            String[] elements = s.Split(',');
+            String[] elements;
+            if (type == EType.LIST_RECTANGLE ||
+                type == EType.LIST_VECTOR2)
+            {
+                elements = s.Split(new String[] { ")," }, StringSplitOptions.None);
+                for (int i = 0; i < elements.Length - 1; ++i)
+                {
+                    elements[i] += ")";
+                }
+            }
+            else
+            {
+                elements = s.Split(',');
+            }
 
             switch (type)
             {
@@ -1191,6 +1305,34 @@ namespace ConfigFile
                         foreach (String stringString in elements)
                         {
                             list.Add(StringToString(stringString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+                case EType.LIST_VECTOR2:
+                    {
+                        if (emptyList)
+                            return new List<Vector2>();
+
+                        List<Vector2> list = new List<Vector2>();
+                        foreach (String vecString in elements)
+                        {
+                            list.Add(StringToVector2(vecString));
+                        }
+                        returnValue = list;
+
+                        break;
+                    }
+                case EType.LIST_RECTANGLE:
+                    {
+                        if (emptyList)
+                            return new List<Rectangle>();
+
+                        List<Rectangle> list = new List<Rectangle>();
+                        foreach (String recString in elements)
+                        {
+                            list.Add(StringToRectangle(recString));
                         }
                         returnValue = list;
 
@@ -1275,6 +1417,28 @@ namespace ConfigFile
 
                         break;
                     }
+                case EType.LIST_LIST_VECTOR2:
+                    {
+                        List<List<Vector2>> listOfLists = new List<List<Vector2>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<Vector2>)ListStringToValue(listString, EType.LIST_VECTOR2));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
+                case EType.LIST_LIST_RECTANGLE:
+                    {
+                        List<List<Rectangle>> listOfLists = new List<List<Rectangle>>();
+                        foreach (String listString in elements)
+                        {
+                            listOfLists.Add((List<Rectangle>)ListStringToValue(listString, EType.LIST_RECTANGLE));
+                        }
+                        returnValue = listOfLists;
+
+                        break;
+                    }
 
                 default:
                     throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a supported list list type.");
@@ -1306,6 +1470,36 @@ namespace ConfigFile
         private String StringToString(String s)
         {
             return s.Replace("\"", "");
+        }
+
+        private Vector2 StringToVector2(String s)
+        {
+            // Remove '(' and ')'
+            s = s.Remove(0, 1);
+            s = s.Remove(s.Length - 1, 1);
+
+            String[] xAndY = s.Split(',');
+
+            float x = StringToFloat(xAndY[0]);
+            float y = StringToFloat(xAndY[1]);
+
+            return new Vector2(x, y);
+        }
+
+        public Rectangle StringToRectangle(String s)
+        {
+            // Remove '(' and ')'
+            s = s.Remove(0, 1);
+            s = s.Remove(s.Length - 1, 1);
+
+            String[] values = s.Split(',');
+
+            int x = StringToInt(values[0]);
+            int y = StringToInt(values[1]);
+            int width = StringToInt(values[2]);
+            int height = StringToInt(values[3]);
+
+            return new Rectangle(x, y, width, height);
         }
 
         #endregion
