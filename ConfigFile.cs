@@ -174,6 +174,8 @@ namespace ConfigFile
             { "List<List<Rectangle>>", EType.LIST_LIST_RECTANGLE },
         };
 
+        public String Path => path;
+
         public ConfigFile(String path)
         {
             this.path = path;
