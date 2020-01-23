@@ -53,6 +53,8 @@ namespace ConfigFile
         LIST_LIST_STRING,
         LIST_LIST_VECTOR2,
         LIST_LIST_RECTANGLE,
+
+        SECTION,
     }
 
     public class SectionAttribute
@@ -172,6 +174,8 @@ namespace ConfigFile
             { "List<List<string>>", EType.LIST_LIST_STRING },
             { "List<List<Vector2>>", EType.LIST_LIST_VECTOR2 },
             { "List<List<Rectangle>>", EType.LIST_LIST_RECTANGLE },
+
+            { "Section", EType.SECTION },
         };
 
         public String Path => path;
@@ -471,7 +475,7 @@ namespace ConfigFile
         }
 
         /// <summary>
-        /// Tip: Don't use this Section if you want to append a lot of Sections in a loop at once.
+        /// Tip: Don't use this Method if you want to append a lot of Sections in a loop at once.
         /// Rather use AppendSectionRange(). It's much faster.
         /// </summary>
         /// <param name="section"></param>
@@ -785,6 +789,11 @@ namespace ConfigFile
                     case EType.RECTANGLE:
                         {
                             returnValue = RectangleToString((Rectangle)value);
+                            break;
+                        }
+                    case EType.SECTION:
+                        {
+                            returnValue = ((Section)value).Name;
                             break;
                         }
                     default:
@@ -1112,8 +1121,15 @@ namespace ConfigFile
 
             if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
             {
-                throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name +
+                if (currentSection.Attributes.Count == 0)
+                {
+                    throw new ArgumentException("Syntax Error in first SectionAttribute in Section \"" + currentSection.Name + "\".");
+                }
+                else
+                {
+                    throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name +
                                             "\" in Section \"" + currentSection.Name + "\".");
+                }
             }
 
             EType type;
@@ -1197,6 +1213,10 @@ namespace ConfigFile
 
                     case EType.RECTANGLE:
                         returnValue = StringToRectangle(s);
+                        break;
+
+                    case EType.SECTION:
+                        returnValue = StringToSection(s);
                         break;
 
                     default:
@@ -1503,6 +1523,22 @@ namespace ConfigFile
             int height = StringToInt(values[3]);
 
             return new Rectangle(x, y, width, height);
+        }
+
+        /// <summary>
+        /// Returns the corresponding Section of a SectionAttribute's value.
+        /// </summary>
+        /// <param name="s"></param>
+        /// <returns></returns>
+        public Section StringToSection(String s)
+        {
+            Section existingSection = sections.Find(section => section.Name == s);
+            if (existingSection == null)
+            {
+                throw new ArgumentException("There is no Section \"" + s + "\".");
+            }
+
+            return existingSection;
         }
 
         #endregion

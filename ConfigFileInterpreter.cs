@@ -7,6 +7,11 @@ using Microsoft.Xna.Framework;
 
 namespace ConfigFile
 {
+    /// <summary>
+    /// Translates raw data types(int, ...) from ConfigFile class to more complex data types(Animation, ...) and
+    /// caches ConfigFiles so that repeated access to the same ConfigFile instance does not process the file's contents
+    /// each time.
+    /// </summary>
     public static class ConfigFileInterpreter
     {
         private static List<ConfigFile> configFileCache = new List<ConfigFile>();
