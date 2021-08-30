@@ -6,8 +6,13 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.Globalization;
 using System.Text;
-using Microsoft.Xna.Framework;
+using System.Reflection;
+using System.Reflection.Emit;
 
+/* OVERHAUL für benutzerdefinierte Typen
+ 1. Struktur des ConfigFiles analysieren, um die Aufgaben des Parsings einer
+    Configdatei besser zu unterteilen.
+ */
 
 // TODO: Beim hinzufügen von neuen SectionAttributes ist nicht gegeben das der gegebene EType und der gegebene Value
 //       übereinstimmen.
@@ -26,6 +31,11 @@ using Microsoft.Xna.Framework;
 // LESSON: String Konkatenation in Schleifen ist schleeeeeeeecht. Falls Strings in der gegebenen Sprache immutable sind,
 //         werden sie immer kopiert und neu erzeugt.
 
+// TODO: Leerzeichen in Stringliteralen sind nach Parsing verschwunden.
+
+// TODO: Erstellung von zusammengesetzten Typen im ConfigFile möglich machen.
+
+
 namespace ConfigFile
 {
     public enum EType
@@ -35,35 +45,40 @@ namespace ConfigFile
         FLOAT,
         DOUBLE,
         STRING,
-        VECTOR2,
-        RECTANGLE,
 
         LIST_BOOL,
         LIST_INT,
         LIST_FLOAT,
         LIST_DOUBLE,
         LIST_STRING,
-        LIST_VECTOR2,
-        LIST_RECTANGLE,
 
         LIST_LIST_BOOL,
         LIST_LIST_INT,
         LIST_LIST_FLOAT,
         LIST_LIST_DOUBLE,
         LIST_LIST_STRING,
-        LIST_LIST_VECTOR2,
-        LIST_LIST_RECTANGLE,
 
         SECTION,
+        USER_DEFINED,
     }
 
     public class SectionAttribute
     {
         public String Name { get; set; }
-        public Object Value { get; set; }
+        public object Value { get; set; }
         public EType Type { get; set; }
 
-        public SectionAttribute(String name, Object value, EType type)
+        public Object this[String fieldName]
+        {
+            get
+            {
+                if (Type == EType.USER_DEFINED)
+                    return Value.GetType().GetField(fieldName).GetValue(Value);
+                return Value;
+            }
+        }
+
+        public SectionAttribute(String name, object value, EType type)
         {
             Name = name;
             Value = value;
@@ -87,6 +102,11 @@ namespace ConfigFile
 
     public class Section
     {
+        public SectionAttribute this[String attributeName]
+        {
+            get { return Attributes.Find((attribute) => attribute.Name == attributeName); }
+        }
+
         public String Name { get; set; }
         public String Category { get; set; }
         public List<SectionAttribute> Attributes
@@ -140,54 +160,97 @@ namespace ConfigFile
         }
     }
 
+    public class UserDefinedType
+    {
+        // 
+        public Type type;
+
+        // attribute types und ob jedes user defined ist
+        public List<Tuple<String, bool>> subtypes = new List<Tuple<string, bool>>();
+    }
+
     public class ConfigFile
     {
+        public Section this[String sectionName]
+        {
+            get { return sections.Find((s) => s.Name == sectionName); }
+        }
+
+        private static AssemblyName assemblyName = new AssemblyName("objectTypes");
+        private static AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName,
+            AssemblyBuilderAccess.Run);
+        private static ModuleBuilder moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name);
+
         private String path;
+        private String fileContents;
 
         private List<Section> sections = new List<Section>();
         private List<Category> categories = new List<Category>();
 
         private static int estimatedCharactersPerSectionString = 150;
 
-        private static Dictionary<String, EType> stringToType = new Dictionary<string, EType>()
+        private static Dictionary<String, EType> stringToEType = new Dictionary<string, EType>()
         {
             { "bool", EType.BOOL },
             { "int", EType.INT },
             { "float", EType.FLOAT },
             { "double", EType.DOUBLE },
             { "string", EType.STRING },
-            { "Vector2", EType.VECTOR2 },
-            { "Rectangle", EType.RECTANGLE },
 
             { "List<bool>", EType.LIST_BOOL },
             { "List<int>", EType.LIST_INT },
             { "List<float>", EType.LIST_FLOAT },
             { "List<double>", EType.LIST_DOUBLE },
             { "List<string>", EType.LIST_STRING },
-            { "List<Vector2>", EType.LIST_VECTOR2 },
-            { "List<Rectangle>", EType.LIST_RECTANGLE },
 
             { "List<List<bool>>", EType.LIST_LIST_BOOL },
             { "List<List<int>>", EType.LIST_LIST_INT },
             { "List<List<float>>", EType.LIST_LIST_FLOAT },
             { "List<List<double>>", EType.LIST_LIST_DOUBLE },
             { "List<List<string>>", EType.LIST_LIST_STRING },
-            { "List<List<Vector2>>", EType.LIST_LIST_VECTOR2 },
-            { "List<List<Rectangle>>", EType.LIST_LIST_RECTANGLE },
 
             { "Section", EType.SECTION },
         };
+        private static Dictionary<String, Type> stringToType = new Dictionary<string, Type>()
+        {
+            { "bool",   typeof(bool) },
+            { "int",    typeof(int) },
+            { "float",  typeof(float) },
+            { "double", typeof(double) },
+            { "string", typeof(string) },
+
+            { "List<bool>",   typeof(List<bool>) },
+            { "List<int>",    typeof(List<int>) },
+            { "List<float>",  typeof(List<float>) },
+            { "List<double>", typeof(List<double>) },
+            { "List<string>", typeof(List<string>) },
+
+            { "List<List<bool>>",   typeof(List<List<bool>>) },
+            { "List<List<int>>",    typeof(List<List<int>>) },
+            { "List<List<float>>",  typeof(List<List<float>>) },
+            { "List<List<double>>", typeof(List<List<double>>) },
+            { "List<List<string>>", typeof(List<List<string>>) },
+        };
+
+        private Dictionary<String, UserDefinedType> userDefinedTypes = new Dictionary<string, UserDefinedType>();
+
 
         public String Path => path;
 
         public ConfigFile(String path)
         {
             this.path = path;
+            this.fileContents = File.ReadAllText(path);
 
-            ParseFileContents(File.ReadAllText(path));
+            ParseFileContents(fileContents);
         }
 
         #region PublicInterface
+
+        public override String ToString()
+        {
+            return fileContents;
+        }
 
         #region SectionAttribute
 
@@ -717,13 +780,13 @@ namespace ConfigFile
 
         public static String SectionAttributeToString(SectionAttribute sectionAttribute)
         {
-            String typeString = stringToType.FirstOrDefault(s => s.Value == sectionAttribute.Type).Key;
+            String typeString = stringToEType.FirstOrDefault(s => s.Value == sectionAttribute.Type).Key;
             String valueString = ValueToString(sectionAttribute.Value, sectionAttribute.Type);
 
             return typeString + ": " + sectionAttribute.Name + " = " + valueString + ";";
         }
 
-        private static String ValueToString(Object value, EType type)
+        private static String ValueToString(object value, EType type)
         {
             if (value == null)
             {
@@ -736,9 +799,7 @@ namespace ConfigFile
                 type == EType.LIST_INT ||
                 type == EType.LIST_FLOAT ||
                 type == EType.LIST_DOUBLE ||
-                type == EType.LIST_STRING ||
-                type == EType.LIST_VECTOR2 ||
-                type == EType.LIST_RECTANGLE)
+                type == EType.LIST_STRING)
             {
                 returnValue = ListToString(value, type);
             }
@@ -746,9 +807,7 @@ namespace ConfigFile
                      type == EType.LIST_LIST_INT ||
                      type == EType.LIST_LIST_FLOAT ||
                      type == EType.LIST_LIST_DOUBLE ||
-                     type == EType.LIST_LIST_STRING ||
-                     type == EType.LIST_LIST_VECTOR2 ||
-                     type == EType.LIST_LIST_RECTANGLE)
+                     type == EType.LIST_LIST_STRING)
             {
                 returnValue = List2dToString(value, type);
             }
@@ -781,16 +840,6 @@ namespace ConfigFile
                             returnValue = StringToFileString((string)value);
                             break;
                         }
-                    case EType.VECTOR2:
-                        {
-                            returnValue = Vector2ToString((Vector2)value);
-                            break;
-                        }
-                    case EType.RECTANGLE:
-                        {
-                            returnValue = RectangleToString((Rectangle)value);
-                            break;
-                        }
                     case EType.SECTION:
                         {
                             returnValue = ((Section)value).Name;
@@ -803,7 +852,7 @@ namespace ConfigFile
             return returnValue;
         }
 
-        private static String ListToString(Object value, EType type)
+        private static String ListToString(object value, EType type)
         {
             String listString = "{";
 
@@ -860,26 +909,6 @@ namespace ConfigFile
 
                         break;
                     }
-                case EType.LIST_VECTOR2:
-                    {
-                        List<Vector2> list = (List<Vector2>)value;
-                        foreach (Vector2 v in list)
-                        {
-                            listString += Vector2ToString(v) + ", ";
-                        }
-
-                        break;
-                    }
-                case EType.LIST_RECTANGLE:
-                    {
-                        List<Rectangle> list = (List<Rectangle>)value;
-                        foreach (Rectangle r in list)
-                        {
-                            listString += RectangleToString(r) + ", ";
-                        }
-
-                        break;
-                    }
 
                 default:
                     throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a valid list type.");
@@ -893,7 +922,7 @@ namespace ConfigFile
             return listString;
         }
 
-        private static String List2dToString(Object value, EType type)
+        private static String List2dToString(object value, EType type)
         {
             String listString = "{";
 
@@ -949,26 +978,6 @@ namespace ConfigFile
 
                         break;
                     }
-                case EType.LIST_LIST_VECTOR2:
-                    {
-                        List<List<Vector2>> list2d = (List<List<Vector2>>)value;
-                        foreach (List<Vector2> vecs in list2d)
-                        {
-                            listString += ListToString(vecs, EType.LIST_VECTOR2) + ", ";
-                        }
-
-                        break;
-                    }
-                case EType.LIST_LIST_RECTANGLE:
-                    {
-                        List<List<Rectangle>> list2d = (List<List<Rectangle>>)value;
-                        foreach (List<Rectangle> recs in list2d)
-                        {
-                            listString += ListToString(recs, EType.LIST_RECTANGLE) + ", ";
-                        }
-
-                        break;
-                    }
             }
 
             if (listString.Contains(','))
@@ -1004,72 +1013,213 @@ namespace ConfigFile
             return "\"" + s + "\"";
         }
 
-        private static String Vector2ToString(Vector2 v)
-        {
-            return "(" + FloatToString(v.X) + ", " + FloatToString(v.Y) + ")";
-        }
+        //private void ParseFileContents_OLD(String fileContents)
+        //{
+        //    // fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
+        //    fileContents = fileContents.Replace("\n", String.Empty);
+        //    fileContents = fileContents.Replace("\r", String.Empty);
+        //    fileContents = fileContents.Replace(" ", String.Empty); // Entfernt auch Leerzeichen in Stringliteralen.
 
-        private static String RectangleToString(Rectangle r)
-        {
-            return "(" + r.X + ", " + r.Y + ", " + r.Width + ", " + r.Height + ")";
-        }
+        //    if (fileContents == String.Empty)
+        //        return;
+
+        //    int currentStartIndex = 0;
+
+        //    int indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
+        //    int indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
+        //    int indexNextSemicolon = -1;
+
+
+        //    // Create Initial Section
+        //    String headerString = fileContents.Substring(indexNextOpenSquareBracket, indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1));
+        //    Section currentSection = ParseSectionHeader(headerString);
+
+        //    currentStartIndex = indexNextClosedSquareBracket + 1;
+
+        //    while (currentStartIndex != fileContents.Length)
+        //    {
+        //        indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
+        //        indexNextSemicolon = fileContents.IndexOf(';', currentStartIndex);
+
+        //        // Next Section
+        //        if (indexNextOpenSquareBracket != -1 &&
+        //            (indexNextOpenSquareBracket - currentStartIndex) < (indexNextSemicolon - currentStartIndex))
+        //        {
+        //            // Add finished Section
+        //            AddSection(currentSection);
+
+        //            // Create new Section
+        //            indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
+        //            currentSection = ParseSectionHeader(fileContents.Substring(indexNextOpenSquareBracket,
+        //                                                                       indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1)));
+
+        //            currentStartIndex = indexNextClosedSquareBracket + 1;
+        //        }
+
+        //        // Next SectionAttribute
+        //        else
+        //        {
+        //            SectionAttribute currentSectionAttribute = ParseSectionAttribute(fileContents.Substring(currentStartIndex,
+        //                                                              indexNextSemicolon - (currentStartIndex - 1)), currentSection);
+
+        //            currentSection.Attributes.Add(currentSectionAttribute);
+
+        //            currentStartIndex = indexNextSemicolon + 1;
+        //        }
+        //    }
+
+        //    // Add last Section
+        //    AddSection(currentSection);
+        //}
 
         private void ParseFileContents(String fileContents)
         {
-            // fileContents = Regex.Replace(fileContents, @"\s+", String.Empty);
-            fileContents = fileContents.Replace("\n", String.Empty);
-            fileContents = fileContents.Replace("\r", String.Empty);
-            fileContents = fileContents.Replace(" ", String.Empty);
-
             if (fileContents == String.Empty)
                 return;
 
-            int currentStartIndex = 0;
+            // Entferne redundante Zeichen.
+            fileContents = fileContents.Replace("\n", String.Empty);
+            fileContents = fileContents.Replace("\r", String.Empty);
+            fileContents = fileContents.Replace(" ", String.Empty); // Entfernt auch Leerzeichen in Stringliteralen.
 
-            int indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
-            int indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
-            int indexNextSemicolon = -1;
+            String[] commands = fileContents.Split("%");
 
-            // Create Initial Section
-            Section currentSection = ParseSectionHeader(fileContents.Substring(indexNextOpenSquareBracket,
-                                                                               indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1)));
-
-            currentStartIndex = indexNextClosedSquareBracket + 1;
-
-            while (currentStartIndex != fileContents.Length)
+            foreach (String command in commands)
             {
-                indexNextOpenSquareBracket = fileContents.IndexOf('[', currentStartIndex);
-                indexNextSemicolon = fileContents.IndexOf(';', currentStartIndex);
-
-                // Next Section
-                if (indexNextOpenSquareBracket != -1 &&
-                    (indexNextOpenSquareBracket - currentStartIndex) < (indexNextSemicolon - currentStartIndex))
+                if (command.StartsWith("typedef")) 
                 {
-                    // Add finished Section
-                    AddSection(currentSection);
-
-                    // Create new Section
-                    indexNextClosedSquareBracket = fileContents.IndexOf(']', currentStartIndex);
-                    currentSection = ParseSectionHeader(fileContents.Substring(indexNextOpenSquareBracket,
-                                                                               indexNextClosedSquareBracket - (indexNextOpenSquareBracket - 1)));
-
-                    currentStartIndex = indexNextClosedSquareBracket + 1;
+                    ProcessTypedef(command);
                 }
-
-                // Next SectionAttribute
-                else
+                else if (command.StartsWith("section"))
                 {
-                    SectionAttribute currentSectionAttribute = ParseSectionAttribute(fileContents.Substring(currentStartIndex,
-                                                                      indexNextSemicolon - (currentStartIndex - 1)), currentSection);
-
-                    currentSection.Attributes.Add(currentSectionAttribute);
-
-                    currentStartIndex = indexNextSemicolon + 1;
+                    ProcessSection(command);
+                }
+                else if (command.StartsWith("include"))
+                {
+                    ProcessInclude(command);
                 }
             }
+        }
 
-            // Add last Section
-            AddSection(currentSection);
+        private void ProcessTypedef(String typedefString)
+        {
+            // Neuen Typ in StringToValue behandeln.
+
+            // Namen des neuen Typs herausfinden.
+            // Checken, ob ein Typ mit demselben Namen bereits existiert.
+            String typeName = GetStringInsideBrackets(typedefString.Substring(0, typedefString.IndexOf(']') + 1));
+            if (userDefinedTypes.ContainsKey(typeName))
+                throw new ArgumentException("The type '" + typeName + "' already exists.");
+
+            // Neuen Typ definieren.
+            TypeBuilder typeBuilder = moduleBuilder.DefineType(typeName);
+
+            // Felder des Typs definieren.
+            List<String> typeFields = typedefString.Remove(0, typedefString.IndexOf(']') + 1).Split(';').ToList();
+            typeFields.RemoveAt(typeFields.Count - 1);
+
+            UserDefinedType newUdt = new UserDefinedType();
+            List<Type> constructorParameterTypes = new List<Type>();
+            List<FieldBuilder> fieldBuilder = new List<FieldBuilder>();
+            typeFields.ForEach((field) =>
+            {
+                String[] typeAndName = field.Split(':');
+                fieldBuilder.Add(typeBuilder.DefineField(typeAndName[1], stringToType[typeAndName[0]], FieldAttributes.Public));
+                constructorParameterTypes.Add(stringToType[typeAndName[0]]);
+
+                newUdt.subtypes.Add(Tuple.Create<string, bool>(typeAndName[0],
+                                    !stringToEType.ContainsKey(typeAndName[0])));
+            });
+
+            ConstructorBuilder constructorBuilder = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard,
+                constructorParameterTypes.ToArray());
+
+            ILGenerator constructorIL = constructorBuilder.GetILGenerator();
+            constructorIL.Emit(OpCodes.Ldarg_0);
+            constructorIL.Emit(OpCodes.Call, typeof(object).GetConstructor(Type.EmptyTypes));
+            for (int i = 0; i < fieldBuilder.Count; ++i)
+            {
+                constructorIL.Emit(OpCodes.Ldarg_0);
+                constructorIL.Emit(OpCodes.Ldarg_S, i + 1);
+                constructorIL.Emit(OpCodes.Stfld, fieldBuilder[i]);
+            }
+            constructorIL.Emit(OpCodes.Ret);
+
+            Type newType = typeBuilder.CreateType();
+            newUdt.type = typeBuilder.CreateType();
+
+            userDefinedTypes.Add(typeName, newUdt);
+
+            // Neuen Typ in stringToType Dictionary ablegen.
+            stringToType.Add(typeName, newType);
+        }
+
+        private void ProcessTypeField(TypeBuilder typeBuilder, String fieldString)
+        {
+            fieldString = fieldString.Remove(fieldString.Length - 1);
+            String[] typeAndName = fieldString.Split(':');
+            typeBuilder.DefineField(typeAndName[1], stringToType[typeAndName[0]], FieldAttributes.Public);
+        }
+
+        private void ProcessSection(String sectionString)
+        {
+            // Neue Section anhand des Namens erstellen.
+            int indexOpenBracket = sectionString.IndexOf('[');
+            int indexClosedBracket = sectionString.IndexOf(']');
+            Section newSection = ParseSectionHeader(sectionString.Substring(indexOpenBracket, 
+                indexClosedBracket - (indexOpenBracket - 1)));
+
+            // Jedes SectionAttribute identifizieren und verarbeiten.
+            List<String> sectionAttributes = sectionString.Remove(0, indexClosedBracket + 1).Split(';').ToList();
+            sectionAttributes.RemoveAt(sectionAttributes.Count - 1);
+
+            sectionAttributes.ForEach((attribute) =>
+            {
+                newSection.Attributes.Add(ProcessSectionAttribute(attribute));
+            });
+
+            AddSection(newSection);
+        }
+
+        private SectionAttribute ProcessSectionAttribute(String attributeString)
+        {
+            // String nach Typ, Name und Wert des Attributs auftrennen.
+            String[] all = attributeString.Split('=');
+            String[] typeAndName = all[0].Split(':');
+
+            String type = typeAndName[0];
+            String name = typeAndName[1];
+            String valueString = all[1];
+
+            // ValueString in objekt umwandeln.
+            object value;
+            if (!stringToEType.ContainsKey(type))
+            {
+                value = StringToValue(valueString, type, true);
+                return new SectionAttribute(name, value, EType.USER_DEFINED);
+            }
+            else
+            {
+                value = StringToValue(valueString, type, false);
+                return new SectionAttribute(name, value, stringToEType[type]);
+            }
+
+        }
+
+        private void ProcessInclude(String includeString)
+        {
+            String includeFile = GetStringInsideBrackets(includeString);
+            String includeFileContents = File.ReadAllText(includeFile);
+
+            ParseFileContents(includeFileContents);
+        }
+
+        private String GetStringInsideBrackets(String str)
+        {
+            int openBracketIndex = str.IndexOf("[");
+            int closingBracketIndex = str.IndexOf("]");
+
+            return str.Substring(openBracketIndex + 1, closingBracketIndex - (openBracketIndex + 1));
         }
 
         private void AddSection(Section section)
@@ -1113,212 +1263,273 @@ namespace ConfigFile
             }
         }
 
-        private SectionAttribute ParseSectionAttribute(String attributeString, Section currentSection)
-        {
-            int numDoubleColons = attributeString.Count(c => c == ':'); ;
-            int numEquals = attributeString.Count(c => c == '=');
-            int numSemicolons = attributeString.Count(c => c == ';');
+        //private SectionAttribute ParseSectionAttribute(String attributeString, Section currentSection)
+        //{
+        //    int numDoubleColons = attributeString.Count(c => c == ':'); ;
+        //    int numEquals = attributeString.Count(c => c == '=');
+        //    int numSemicolons = attributeString.Count(c => c == ';');
 
-            if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
+        //    if (numDoubleColons != 1 || numEquals != 1 || numSemicolons != 1)
+        //    {
+        //        if (currentSection.Attributes.Count == 0)
+        //        {
+        //            throw new ArgumentException("Syntax Error in first SectionAttribute in Section \"" + currentSection.Name + "\".");
+        //        }
+        //        else
+        //        {
+        //            throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name +
+        //                                    "\" in Section \"" + currentSection.Name + "\".");
+        //        }
+        //    }
+
+        //    EType type;
+        //    String name;
+        //    Object value;
+
+        //    // TODO: Am Anfang der Methode wird bereits nach diesen Zeichen gesucht. Das sollte man
+        //    //       insgesamt nur einmal machen.
+        //    int indexDoubleColon = attributeString.IndexOf(':');
+        //    int indexEquals = attributeString.IndexOf('=');
+        //    int indexSemicolon = attributeString.IndexOf(';');
+
+        //    String typeString = attributeString.Substring(0, indexDoubleColon);
+        //    name = attributeString.Substring(indexDoubleColon + 1, indexEquals - (indexDoubleColon + 1));
+        //    String valueString = attributeString.Substring(indexEquals + 1, indexSemicolon - (indexEquals + 1));
+
+        //    if (!stringToType.TryGetValue(typeString, out type))
+        //    {
+        //        throw new ArgumentException("Given type \"" + typeString + "\" does not exist.");
+        //    }
+
+        //    value = StringToValue(valueString, type);
+
+        //    return new SectionAttribute(name, value, type);
+        //}
+
+        private object StringToValue_UserDefined(String valueString, String type)
+        {
+            List<String> valueStrings = new List<String>();
+            int bracketCounter = 1;
+            int charIndex = 1;
+            char currentChar;
+            String nextValueString = String.Empty;
+            while(bracketCounter > 0)
             {
-                if (currentSection.Attributes.Count == 0)
+                currentChar = valueString[charIndex++];
+
+                if (currentChar == '{')
                 {
-                    throw new ArgumentException("Syntax Error in first SectionAttribute in Section \"" + currentSection.Name + "\".");
+                    if (bracketCounter >= 1)
+                        nextValueString += '{';
+                    ++bracketCounter;
                 }
+                else if (currentChar == '}')
+                {
+                    if (bracketCounter > 1)
+                        nextValueString += '}';
+                    --bracketCounter;
+
+                    if (bracketCounter == 0)
+                        valueStrings.Add(nextValueString);
+                }
+                else if (bracketCounter > 1)
+                    nextValueString += currentChar;
+                else if (currentChar != ',')
+                    nextValueString += currentChar;
                 else
                 {
-                    throw new ArgumentException("Syntax Error in SectionAttribute after \"" + currentSection.Attributes[currentSection.Attributes.Count - 1].Name +
-                                            "\" in Section \"" + currentSection.Name + "\".");
+                    valueStrings.Add(nextValueString);
+                    nextValueString = String.Empty;
                 }
             }
+            object[] valueObjects = new object[valueStrings.Count];
 
-            EType type;
-            String name;
-            Object value;
+            UserDefinedType udt = userDefinedTypes[type];
 
-            int indexDoubleColon = attributeString.IndexOf(':');
-            int indexEquals = attributeString.IndexOf('=');
-            int indexSemicolon = attributeString.IndexOf(';');
-
-            String typeString = attributeString.Substring(0, indexDoubleColon);
-            name = attributeString.Substring(indexDoubleColon + 1, indexEquals - (indexDoubleColon + 1));
-            String valueString = attributeString.Substring(indexEquals + 1, indexSemicolon - (indexEquals + 1));
-
-            if (!stringToType.TryGetValue(typeString, out type))
+            for (int i = 0; i < valueStrings.Count; ++i)
             {
-                throw new ArgumentException("Given type \"" + typeString + "\" does not exist.");
+                valueObjects[i] = StringToValue(valueStrings[i], udt.subtypes[i].Item1,
+                    udt.subtypes[i].Item2);
             }
 
-            value = StringToValue(valueString, type);
-
-            return new SectionAttribute(name, value, type);
+            return Activator.CreateInstance(udt.type, valueObjects);
         }
 
-        private Object StringToValue(String s, EType type)
+        private object StringToValue(String valueString, String type, bool isUserDefined)
         {
-            if (s == "NULL")
-            {
-                return null;
-            }
+            object returnValue = null;
 
-            Object returnValue;
-
-            if (type == EType.LIST_BOOL ||
-                type == EType.LIST_INT ||
-                type == EType.LIST_FLOAT ||
-                type == EType.LIST_DOUBLE ||
-                type == EType.LIST_STRING ||
-                type == EType.LIST_VECTOR2 ||
-                type == EType.LIST_RECTANGLE)
+            if (isUserDefined)
             {
-                returnValue = ListStringToValue(s, type);
-            }
-            else if (type == EType.LIST_LIST_BOOL ||
-                     type == EType.LIST_LIST_INT ||
-                     type == EType.LIST_LIST_FLOAT ||
-                     type == EType.LIST_LIST_DOUBLE ||
-                     type == EType.LIST_LIST_STRING ||
-                     type == EType.LIST_LIST_VECTOR2 ||
-                     type == EType.LIST_LIST_RECTANGLE)
-            {
-                returnValue = List2dStringToValue(s, type);
+                returnValue = StringToValue_UserDefined(valueString, type);
             }
             else
             {
-                switch (type)
+                if (type.Contains("List<List"))
                 {
-                    case EType.BOOL:
-                        returnValue = StringToBool(s);
-                        break;
-
-                    case EType.INT:
-                        returnValue = StringToInt(s);
-                        break;
-
-                    case EType.FLOAT:
-                        returnValue = StringToFloat(s);
-                        break;
-
-                    case EType.DOUBLE:
-                        returnValue = StringToDouble(s);
-                        break;
-
-                    case EType.STRING:
-                        returnValue = StringToString(s);
-                        break;
-
-                    case EType.VECTOR2:
-                        returnValue = StringToVector2(s);
-                        break;
-
-                    case EType.RECTANGLE:
-                        returnValue = StringToRectangle(s);
-                        break;
-
-                    case EType.SECTION:
-                        returnValue = StringToSection(s);
-                        break;
-
-                    default:
-                        throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
+                    returnValue = List2dStringToValue(valueString, type);
+                }
+                else if (type.Contains("List"))
+                {
+                    returnValue = ListStringToValue(valueString, type);
+                }
+                else
+                {
+                    switch(type)
+                    {
+                        case "bool": { returnValue = StringToBool(valueString); break; }
+                        case "int": { returnValue = StringToInt(valueString); break; }
+                        case "float": { returnValue = StringToFloat(valueString); break; }
+                        case "double": { returnValue = StringToDouble(valueString); break; }
+                        case "string": { returnValue = StringToString(valueString); break; }
+                    }
                 }
             }
 
             return returnValue;
         }
 
-        private Object ListStringToValue(String s, EType type)
+        //private Object StringToValue_OLD(String valueString, EType type)
+        //{
+        //    // Wie geht das mit den benutzerdefinierten Typen?
+        //    // Jeder von denen hat einen speziellen EType, den ich 
+        //    // hier im Code aber vorher nicht weiß.
+        //    // Ein EType für benutzerdefinierte Typen ?
+        //    // Vom valueString selbst ist der Typ nicht ablesbar,
+        //    // dieser muss also als String zur Laufzeit übergeben werden.
+
+        //    if (valueString == "NULL")
+        //    {
+        //        return null;
+        //    }
+
+        //    Object returnValue;
+
+        //    if (type == EType.LIST_BOOL ||
+        //        type == EType.LIST_INT ||
+        //        type == EType.LIST_FLOAT ||
+        //        type == EType.LIST_DOUBLE ||
+        //        type == EType.LIST_STRING ||
+        //        type == EType.LIST_VECTOR2 ||
+        //        type == EType.LIST_RECTANGLE)
+        //    {
+        //        returnValue = ListStringToValue(valueString, type);
+        //    }
+        //    else if (type == EType.LIST_LIST_BOOL ||
+        //             type == EType.LIST_LIST_INT ||
+        //             type == EType.LIST_LIST_FLOAT ||
+        //             type == EType.LIST_LIST_DOUBLE ||
+        //             type == EType.LIST_LIST_STRING ||
+        //             type == EType.LIST_LIST_VECTOR2 ||
+        //             type == EType.LIST_LIST_RECTANGLE)
+        //    {
+        //        returnValue = List2dStringToValue(valueString, type);
+        //    }
+        //    else
+        //    {
+        //        switch (type)
+        //        {
+        //            case EType.BOOL:
+        //                returnValue = StringToBool(valueString);
+        //                break;
+
+        //            case EType.INT:
+        //                returnValue = StringToInt(valueString);
+        //                break;
+
+        //            case EType.FLOAT:
+        //                returnValue = StringToFloat(valueString);
+        //                break;
+
+        //            case EType.DOUBLE:
+        //                returnValue = StringToDouble(valueString);
+        //                break;
+
+        //            case EType.STRING:
+        //                returnValue = StringToString(valueString);
+        //                break;
+
+        //            case EType.SECTION:
+        //                returnValue = StringToSection(valueString);
+        //                break;
+
+        //            default:
+        //                throw new ArgumentException("Given type \"" + type.ToString() + "\" is not supported.");
+        //        }
+        //    }
+
+        //    return returnValue;
+        //}
+
+        private object ListStringToValue(String listString, String type)
         {
-            Object returnValue = null;
+            object returnValue = null;
 
             bool emptyList = false;
-            if (s == "{}")
-            {
+            if (listString == "{}")
                 emptyList = true;
-            }
 
             // Remove '{' and '}'
-            s = s.Remove(0, 1);
-            s = s.Remove(s.Length - 1, 1);
+            listString = listString.Remove(0, 1);
+            listString = listString.Remove(listString.Length - 1, 1);
 
-            String[] elements;
-            if (type == EType.LIST_RECTANGLE ||
-                type == EType.LIST_VECTOR2)
-            {
-                elements = s.Split(new String[] { ")," }, StringSplitOptions.None);
-                for (int i = 0; i < elements.Length - 1; ++i)
-                {
-                    elements[i] += ")";
-                }
-            }
-            else
-            {
-                elements = s.Split(',');
-            }
+            String[] elements = listString.Split(',');
 
             switch (type)
             {
-                case EType.LIST_BOOL:
+                case "List<bool>":
                     {
                         if (emptyList)
                             return new List<bool>();
 
                         List<bool> list = new List<bool>();
                         foreach (String boolString in elements)
-                        {
                             list.Add(StringToBool(boolString));
-                        }
                         returnValue = list;
 
                         break;
                     }
 
-                case EType.LIST_INT:
+                case "List<int>":
                     {
                         if (emptyList)
                             return new List<int>();
 
                         List<int> list = new List<int>();
                         foreach (String intString in elements)
-                        {
                             list.Add(StringToInt(intString));
-                        }
                         returnValue = list;
 
                         break;
                     }
 
-                case EType.LIST_FLOAT:
+                case "List<float>":
                     {
                         if (emptyList)
                             return new List<float>();
 
                         List<float> list = new List<float>();
                         foreach (String floatString in elements)
-                        {
                             list.Add(StringToFloat(floatString));
-                        }
                         returnValue = list;
 
                         break;
                     }
 
-                case EType.LIST_DOUBLE:
+                case "List<double>":
                     {
                         if (emptyList)
                             return new List<double>();
 
                         List<double> list = new List<double>();
                         foreach (String doubleString in elements)
-                        {
                             list.Add(StringToDouble(doubleString));
-                        }
                         returnValue = list;
 
                         break;
                     }
 
-                case EType.LIST_STRING:
+                case "List<string>":
                     {
                         if (emptyList)
                             return new List<string>();
@@ -1326,37 +1537,7 @@ namespace ConfigFile
                         // TODO: Dämliche Bennenung StringToString und stringString.
                         List<string> list = new List<string>();
                         foreach (String stringString in elements)
-                        {
                             list.Add(StringToString(stringString));
-                        }
-                        returnValue = list;
-
-                        break;
-                    }
-                case EType.LIST_VECTOR2:
-                    {
-                        if (emptyList)
-                            return new List<Vector2>();
-
-                        List<Vector2> list = new List<Vector2>();
-                        foreach (String vecString in elements)
-                        {
-                            list.Add(StringToVector2(vecString));
-                        }
-                        returnValue = list;
-
-                        break;
-                    }
-                case EType.LIST_RECTANGLE:
-                    {
-                        if (emptyList)
-                            return new List<Rectangle>();
-
-                        List<Rectangle> list = new List<Rectangle>();
-                        foreach (String recString in elements)
-                        {
-                            list.Add(StringToRectangle(recString));
-                        }
                         returnValue = list;
 
                         break;
@@ -1369,9 +1550,123 @@ namespace ConfigFile
             return returnValue;
         }
 
-        private Object List2dStringToValue(String s, EType type)
+        //private Object ListStringToValue_OLD(String listString, EType type)
+        //{
+        //    Object returnValue = null;
+
+        //    bool emptyList = false;
+        //    if (listString == "{}")
+        //    {
+        //        emptyList = true;
+        //    }
+
+        //    // Remove '{' and '}'
+        //    listString = listString.Remove(0, 1);
+        //    listString = listString.Remove(listString.Length - 1, 1);
+
+        //    String[] elements;
+        //    if (type == EType.LIST_RECTANGLE ||
+        //        type == EType.LIST_VECTOR2)
+        //    {
+        //        elements = listString.Split(new String[] { ")," }, StringSplitOptions.None);
+        //        for (int i = 0; i < elements.Length - 1; ++i)
+        //        {
+        //            elements[i] += ")";
+        //        }
+        //    }
+        //    else
+        //    {
+        //        elements = listString.Split(',');
+        //    }
+
+        //    switch (type)
+        //    {
+        //        case EType.LIST_BOOL:
+        //            {
+        //                if (emptyList)
+        //                    return new List<bool>();
+
+        //                List<bool> list = new List<bool>();
+        //                foreach (String boolString in elements)
+        //                {
+        //                    list.Add(StringToBool(boolString));
+        //                }
+        //                returnValue = list;
+
+        //                break;
+        //            }
+
+        //        case EType.LIST_INT:
+        //            {
+        //                if (emptyList)
+        //                    return new List<int>();
+
+        //                List<int> list = new List<int>();
+        //                foreach (String intString in elements)
+        //                {
+        //                    list.Add(StringToInt(intString));
+        //                }
+        //                returnValue = list;
+
+        //                break;
+        //            }
+
+        //        case EType.LIST_FLOAT:
+        //            {
+        //                if (emptyList)
+        //                    return new List<float>();
+
+        //                List<float> list = new List<float>();
+        //                foreach (String floatString in elements)
+        //                {
+        //                    list.Add(StringToFloat(floatString));
+        //                }
+        //                returnValue = list;
+
+        //                break;
+        //            }
+
+        //        case EType.LIST_DOUBLE:
+        //            {
+        //                if (emptyList)
+        //                    return new List<double>();
+
+        //                List<double> list = new List<double>();
+        //                foreach (String doubleString in elements)
+        //                {
+        //                    list.Add(StringToDouble(doubleString));
+        //                }
+        //                returnValue = list;
+
+        //                break;
+        //            }
+
+        //        case EType.LIST_STRING:
+        //            {
+        //                if (emptyList)
+        //                    return new List<string>();
+
+        //                // TODO: Dämliche Bennenung StringToString und stringString.
+        //                List<string> list = new List<string>();
+        //                foreach (String stringString in elements)
+        //                {
+        //                    list.Add(StringToString(stringString));
+        //                }
+        //                returnValue = list;
+
+        //                break;
+        //            }
+
+        //        default:
+        //            throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a supported list type.");
+        //    }
+
+        //    return returnValue;
+        //}
+
+        private object List2dStringToValue(String s, String type)
         {
-            Object returnValue = null;
+            object returnValue = null;
 
             s = s.Remove(0, 1);
             s = s.Remove(s.Length - 1, 1);
@@ -1379,84 +1674,54 @@ namespace ConfigFile
             String[] elements = s.Split(new String[] { "}," }, StringSplitOptions.None);
 
             for (int i = 0; i < elements.Length - 1; ++i)
-            {
                 elements[i] += "}";
-            }
 
             switch (type)
             {
-                case EType.LIST_LIST_BOOL:
+                case "List<List<bool>>":
                     {
                         List<List<bool>> listOfLists = new List<List<bool>>();
                         foreach (String listString in elements)
-                        {
-                            listOfLists.Add((List<bool>)ListStringToValue(listString, EType.LIST_BOOL));
-                        }
+                            listOfLists.Add((List<bool>)ListStringToValue(listString, "List<bool>"));
                         returnValue = listOfLists;
 
                         break;
                     }
-                case EType.LIST_LIST_INT:
+                case "List<List<int>>":
                     {
                         List<List<int>> listOfLists = new List<List<int>>();
                         foreach (String listString in elements)
-                        {
-                            listOfLists.Add((List<int>)ListStringToValue(listString, EType.LIST_INT));
-                        }
+                            listOfLists.Add((List<int>)ListStringToValue(listString, "List<int>"));
                         returnValue = listOfLists;
 
                         break;
                     }
-                case EType.LIST_LIST_FLOAT:
+                case "List<List<float>>":
                     {
                         List<List<float>> listOfLists = new List<List<float>>();
                         foreach (String listString in elements)
-                        {
-                            listOfLists.Add((List<float>)ListStringToValue(listString, EType.LIST_FLOAT));
-                        }
+                            listOfLists.Add((List<float>)ListStringToValue(listString, "List<float>"));
                         returnValue = listOfLists;
 
                         break;
                     }
-                case EType.LIST_LIST_DOUBLE:
+                case "List<List<double>>":
                     {
                         List<List<double>> listOfLists = new List<List<double>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<double>)ListStringToValue(listString, EType.LIST_DOUBLE));
+                            listOfLists.Add((List<double>)ListStringToValue(listString, "List<double>"));
                         }
                         returnValue = listOfLists;
 
                         break;
                     }
-                case EType.LIST_LIST_STRING:
+                case "List<List<string>>":
                     {
                         List<List<string>> listOfLists = new List<List<string>>();
                         foreach (String listString in elements)
                         {
-                            listOfLists.Add((List<string>)ListStringToValue(listString, EType.LIST_STRING));
-                        }
-                        returnValue = listOfLists;
-
-                        break;
-                    }
-                case EType.LIST_LIST_VECTOR2:
-                    {
-                        List<List<Vector2>> listOfLists = new List<List<Vector2>>();
-                        foreach (String listString in elements)
-                        {
-                            listOfLists.Add((List<Vector2>)ListStringToValue(listString, EType.LIST_VECTOR2));
-                        }
-                        returnValue = listOfLists;
-
-                        break;
-                    }
-                case EType.LIST_LIST_RECTANGLE:
-                    {
-                        List<List<Rectangle>> listOfLists = new List<List<Rectangle>>();
-                        foreach (String listString in elements)
-                        {
-                            listOfLists.Add((List<Rectangle>)ListStringToValue(listString, EType.LIST_RECTANGLE));
+                            listOfLists.Add((List<string>)ListStringToValue(listString, "List<string>"));
                         }
                         returnValue = listOfLists;
 
@@ -1469,6 +1734,85 @@ namespace ConfigFile
 
             return returnValue;
         }
+
+        //private Object List2dStringToValue_OLD(String s, EType type)
+        //{
+        //    Object returnValue = null;
+
+        //    s = s.Remove(0, 1);
+        //    s = s.Remove(s.Length - 1, 1);
+
+        //    String[] elements = s.Split(new String[] { "}," }, StringSplitOptions.None);
+
+        //    for (int i = 0; i < elements.Length - 1; ++i)
+        //    {
+        //        elements[i] += "}";
+        //    }
+
+        //    switch (type)
+        //    {
+        //        case EType.LIST_LIST_BOOL:
+        //            {
+        //                List<List<bool>> listOfLists = new List<List<bool>>();
+        //                foreach (String listString in elements)
+        //                {
+        //                    listOfLists.Add((List<bool>)ListStringToValue(listString, EType.LIST_BOOL));
+        //                }
+        //                returnValue = listOfLists;
+
+        //                break;
+        //            }
+        //        case EType.LIST_LIST_INT:
+        //            {
+        //                List<List<int>> listOfLists = new List<List<int>>();
+        //                foreach (String listString in elements)
+        //                {
+        //                    listOfLists.Add((List<int>)ListStringToValue(listString, EType.LIST_INT));
+        //                }
+        //                returnValue = listOfLists;
+
+        //                break;
+        //            }
+        //        case EType.LIST_LIST_FLOAT:
+        //            {
+        //                List<List<float>> listOfLists = new List<List<float>>();
+        //                foreach (String listString in elements)
+        //                {
+        //                    listOfLists.Add((List<float>)ListStringToValue(listString, EType.LIST_FLOAT));
+        //                }
+        //                returnValue = listOfLists;
+
+        //                break;
+        //            }
+        //        case EType.LIST_LIST_DOUBLE:
+        //            {
+        //                List<List<double>> listOfLists = new List<List<double>>();
+        //                foreach (String listString in elements)
+        //                {
+        //                    listOfLists.Add((List<double>)ListStringToValue(listString, EType.LIST_DOUBLE));
+        //                }
+        //                returnValue = listOfLists;
+
+        //                break;
+        //            }
+        //        case EType.LIST_LIST_STRING:
+        //            {
+        //                List<List<string>> listOfLists = new List<List<string>>();
+        //                foreach (String listString in elements)
+        //                {
+        //                    listOfLists.Add((List<string>)ListStringToValue(listString, EType.LIST_STRING));
+        //                }
+        //                returnValue = listOfLists;
+
+        //                break;
+        //            }
+
+        //        default:
+        //            throw new ArgumentException("Given type \"" + type.ToString() + "\" is not a supported list list type.");
+        //    }
+
+        //    return returnValue;
+        //}
 
         private bool StringToBool(String s)
         {
@@ -1493,36 +1837,6 @@ namespace ConfigFile
         private String StringToString(String s)
         {
             return s.Replace("\"", "");
-        }
-
-        private Vector2 StringToVector2(String s)
-        {
-            // Remove '(' and ')'
-            s = s.Remove(0, 1);
-            s = s.Remove(s.Length - 1, 1);
-
-            String[] xAndY = s.Split(',');
-
-            float x = StringToFloat(xAndY[0]);
-            float y = StringToFloat(xAndY[1]);
-
-            return new Vector2(x, y);
-        }
-
-        public Rectangle StringToRectangle(String s)
-        {
-            // Remove '(' and ')'
-            s = s.Remove(0, 1);
-            s = s.Remove(s.Length - 1, 1);
-
-            String[] values = s.Split(',');
-
-            int x = StringToInt(values[0]);
-            int y = StringToInt(values[1]);
-            int width = StringToInt(values[2]);
-            int height = StringToInt(values[3]);
-
-            return new Rectangle(x, y, width, height);
         }
 
         /// <summary>
